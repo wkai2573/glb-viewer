@@ -1,2 +1,5 @@
-src/model-viewer.min.js -text
+src/three.min.js -text
+src/GLTFLoader.js -text
+src/DRACOLoader.js -text
+src/OrbitControls.js -text
 *.glb binary

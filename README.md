@@ -35,6 +35,20 @@ Windows 不允許程式自行變更預設，所以要手動做一次：
 
 雙擊 `.glb`。左鍵旋轉，滾輪縮放，右鍵平移。模型含動畫時，標題列會出現「播放動畫」。
 
+### 光線效果
+
+按標題列的「光線」會展開右側面板。
+
+- **光線預設**：柔和攝影棚、正午強光、側逆光輪廓、風格 B，一鍵套用。
+- **顯示方式**：
+  - 上色：保留模型原本的材質，搭配內建的攝影棚環境光。
+  - 純顏色：不打光，只看貼圖原色。
+  - 風格 B：兩階明暗加描邊的卡通風格。
+- **打光**：可以調水平角度、仰角、亮度、環境光，風格 B 另有明暗交界與描邊粗細。「光線跟著鏡頭」開啟時，光源方向以畫面為準。
+- 按住 Shift 並在畫面上拖曳，可以直接轉動光源。
+
+設定不會被記住，每次開啟都從「柔和攝影棚」開始。
+
 專案附了一個範例檔 `samples/triangle.glb`，可以拿來試試看。
 
 ## 移除
@@ -53,12 +67,13 @@ Windows 不允許程式自行變更預設，所以要手動做一次：
 
 ## 運作方式
 
-雙擊後，`GlbViewer.vbs` 以無視窗方式啟動 `GlbViewer.ps1`。它只在 `127.0.0.1` 的隨機埠上開一個暫時的本機伺服器，提供檢視頁、模型與 `model-viewer` 元件，然後用 Microsoft Edge 的應用程式視窗開啟。找不到 Edge 時改用預設瀏覽器。網址帶有隨機路徑，並且會檢查請求的主機名稱。視窗關閉時頁面會通知伺服器，伺服器在幾秒內自行結束。
+雙擊後，`GlbViewer.vbs` 以無視窗方式啟動 `GlbViewer.ps1`。它只在 `127.0.0.1` 的隨機埠上開一個暫時的本機伺服器，提供檢視頁、模型與 three.js 的腳本，然後用 Microsoft Edge 的應用程式視窗開啟。找不到 Edge 時改用預設瀏覽器。網址帶有隨機路徑，並且會檢查請求的主機名稱。視窗關閉時頁面會通知伺服器，伺服器在幾秒內自行結束。
 
 ## 限制
 
 - 只支援 `.glb`。`.gltf` 常依賴外部檔案，沒有處理。
-- 使用 Draco 或 KTX2 壓縮的模型，`model-viewer` 會從 Google 的網站載入解碼器，這類模型需要網路。
+- 使用 Draco 壓縮的模型，會從 Google 的網站載入解碼器，這類模型需要網路。
+- 使用 KTX2 貼圖壓縮或 Meshopt 壓縮的模型不支援，會顯示錯誤訊息。
 - 僅支援 Windows，需要 Windows PowerShell 5.1，系統內建即有。
 
 ## 開發與測試
@@ -73,4 +88,4 @@ powershell -ExecutionPolicy Bypass -File .\test.ps1
 
 本專案以 [MIT 授權](LICENSE) 釋出。
 
-附帶的 [model-viewer](https://github.com/google/model-viewer) 3.5.0 以 Apache-2.0 授權釋出，授權文字見 [src/model-viewer.LICENSE.txt](src/model-viewer.LICENSE.txt)。
+附帶的 [three.js](https://github.com/mrdoob/three.js) r128 以 MIT 授權釋出，授權文字見 [src/three.LICENSE.txt](src/three.LICENSE.txt)。

@@ -70,10 +70,22 @@ try {
         Assert-That '不存在的路由回 404' ((Get-Status ($s.Url + 'nope')) -eq 404)
 
         Write-Host '離線元件'
-        $js = $null
-        try { $js = Invoke-WebRequest -Uri ($s.Url + 'model-viewer.min.js') -UseBasicParsing } catch { }
-        Assert-That '顯示元件由本機伺服器提供' ($js -and $js.StatusCode -eq 200 -and $js.Content.Length -gt 100000)
-        Assert-That '首頁不依賴外部網站' ($page.Content -notmatch 'https?://(?!127\.0\.0\.1)[^"''\s]+\.js')
+        $srcs = @([regex]::Matches($page.Content, '<script[^>]*\ssrc="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+        Assert-That '首頁有引用腳本' ($srcs.Count -gt 0)
+        $unreachable = $srcs | Where-Object {
+            $r = $null
+            try { $r = Invoke-WebRequest -Uri ($s.Url + $_) -UseBasicParsing } catch { }
+            -not ($r -and $r.StatusCode -eq 200 -and $r.Headers['Content-Type'] -like 'text/javascript*' -and $r.Content.Length -gt 1000)
+        }
+        Assert-That '首頁引用的每個腳本都由本機伺服器提供' (-not $unreachable) ($unreachable -join ', ')
+        Assert-That '首頁引用的腳本都是相對路徑' (-not ($srcs | Where-Object { $_ -match '^(https?:)?//' }))
+        Assert-That '核心與解碼載入器都有引用' (($srcs -contains 'three.min.js') -and ($srcs -contains 'GLTFLoader.js') -and ($srcs -contains 'DRACOLoader.js') -and ($srcs -contains 'OrbitControls.js'))
+        Assert-That '舊的顯示元件不再被提供' ((Get-Status ($s.Url + 'model-viewer.min.js')) -eq 404)
+        Assert-That '腳本以外的檔案不會被提供' ((Get-Status ($s.Url + 'GlbViewer.ps1')) -eq 404)
+        # 唯一允許的外部網址是 Draco 解碼器，只有開啟 Draco 壓縮的模型時才會用到
+        $external = @([regex]::Matches($page.Content, 'https?://(?!127\.0\.0\.1)[^"''\s`)]+') | ForEach-Object { $_.Value })
+        $unexpected = $external | Where-Object { $_ -ne 'https://www.gstatic.com/draco/versioned/decoders/1.4.1/' }
+        Assert-That '首頁除了 Draco 解碼器外不依賴外部網站' (-not $unexpected) ($unexpected -join ', ')
 
         Write-Host '載入中字樣的 bug'
         Assert-That '隱藏屬性不會被樣式蓋掉' ($page.Content -match '\[hidden\]\s*\{[^}]*display:\s*none')
@@ -99,7 +111,7 @@ try {
     & powershell.exe @common $installer @opts -NoOpenSettings | Out-Null
     Assert-That '安裝成功結束' ($LASTEXITCODE -eq 0)
 
-    $expected = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'model-viewer.min.js', 'model-viewer.LICENSE.txt', 'uninstall.ps1'
+    $expected = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt', 'uninstall.ps1'
     $missing = $expected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $installDir $_)) }
     Assert-That '安裝資料夾含有所有必要檔案' (-not $missing) ($missing -join ', ')
 
@@ -114,7 +126,7 @@ try {
     $installed = Start-Viewer (Join-Path $installDir 'GlbViewer.ps1')
     if ($installed.Url) {
         $js2 = $null
-        try { $js2 = Invoke-WebRequest -Uri ($installed.Url + 'model-viewer.min.js') -UseBasicParsing } catch { }
+        try { $js2 = Invoke-WebRequest -Uri ($installed.Url + 'three.min.js') -UseBasicParsing } catch { }
         Assert-That '安裝後的副本可獨立運作' ($js2 -and $js2.StatusCode -eq 200)
         Invoke-WebRequest -Uri ($installed.Url + 'bye') -UseBasicParsing | Out-Null
         Wait-Exit $installed.Proc 8 | Out-Null
@@ -122,8 +134,13 @@ try {
         Assert-That '安裝後的副本可獨立運作' $false
     }
 
+    # 模擬從舊版升級：舊版留下的檔案要在重新安裝時清掉
+    $stale = 'model-viewer.min.js', 'model-viewer.LICENSE.txt'
+    $stale | ForEach-Object { Set-Content -LiteralPath (Join-Path $installDir $_) -Value 'old' }
     & powershell.exe @common $installer @opts -NoOpenSettings | Out-Null
     Assert-That '重複安裝不會出錯' ($LASTEXITCODE -eq 0)
+    $left = $stale | Where-Object { Test-Path -LiteralPath (Join-Path $installDir $_) }
+    Assert-That '重新安裝會清掉舊版殘留的檔案' (-not $left) ($left -join ', ')
 
     & powershell.exe @common (Join-Path $installDir 'uninstall.ps1') @opts | Out-Null
     Assert-That '移除成功結束' ($LASTEXITCODE -eq 0)

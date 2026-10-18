@@ -10,7 +10,11 @@ $file = (Resolve-Path -LiteralPath $Path).Path
 $name = [IO.Path]::GetFileName($file)
 
 $template = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'viewer.html'), [Text.Encoding]::UTF8)
-$viewerJs = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'model-viewer.min.js'))
+# 檢視頁用到的腳本，只提供這份清單內的檔案
+$scripts = @{}
+foreach ($js in 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js') {
+    $scripts[$js] = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $js))
+}
 $pageBytes = [Text.Encoding]::UTF8.GetBytes($template.Replace('{{NAME}}', [Net.WebUtility]::HtmlEncode($name)))
 
 # 隨機埠與隨機路徑前綴，避免被其他網頁猜到
@@ -78,14 +82,18 @@ try {
                                 $fs.CopyTo($res.OutputStream)
                             } finally { $fs.Dispose() }
                         }
-                        'model-viewer.min.js' {
-                            $res.ContentType = 'text/javascript; charset=utf-8'
-                            $res.ContentLength64 = $viewerJs.Length
-                            $res.OutputStream.Write($viewerJs, 0, $viewerJs.Length)
-                        }
                         'ping' { $res.StatusCode = 204 }
                         'bye'  { $byeAt = Get-Date; $res.StatusCode = 204 }
-                        default { $res.StatusCode = 404 }
+                        default {
+                            if ($scripts.ContainsKey($route)) {
+                                $bytes = $scripts[$route]
+                                $res.ContentType = 'text/javascript; charset=utf-8'
+                                $res.ContentLength64 = $bytes.Length
+                                $res.OutputStream.Write($bytes, 0, $bytes.Length)
+                            } else {
+                                $res.StatusCode = 404
+                            }
+                        }
                     }
                 }
             } catch {

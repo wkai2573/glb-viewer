@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $progId = 'GlbViewer.File'
-$required = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'model-viewer.min.js', 'model-viewer.LICENSE.txt'
+$required = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt'
 
 # 找出來源：在專案資料夾內執行就用本機檔案，否則從 GitHub 下載。
 $srcDir = $null
@@ -41,6 +41,11 @@ try {
         Copy-Item -LiteralPath (Join-Path $srcDir $name) -Destination (Join-Path $InstallDir $name) -Force
     }
     Copy-Item -LiteralPath (Join-Path (Split-Path $srcDir -Parent) 'uninstall.ps1') -Destination (Join-Path $InstallDir 'uninstall.ps1') -Force
+
+    # 舊版用過、現在不再需要的檔案
+    foreach ($name in 'model-viewer.min.js', 'model-viewer.LICENSE.txt') {
+        Remove-Item -LiteralPath (Join-Path $InstallDir $name) -Force -ErrorAction SilentlyContinue
+    }
 } finally {
     if ($temp) { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
 }

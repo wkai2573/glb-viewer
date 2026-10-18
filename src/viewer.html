@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{NAME}}</title>
-<script type="module" src="model-viewer.min.js"></script>
 <style>
   :root {
     --bg: #15171b;
     --bar: rgba(255, 255, 255, 0.07);
+    --panel: rgba(28, 31, 37, 0.92);
+    --line: rgba(255, 255, 255, 0.14);
     --fg: #e8eaee;
     --muted: #9aa0aa;
     --accent: #6ea8ff;
@@ -17,70 +18,536 @@
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
     font: 14px/1.4 "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif; overflow: hidden; }
-  model-viewer { width: 100%; height: 100%; --poster-color: transparent; background: radial-gradient(circle at 50% 40%, #2a2e36, var(--bg) 70%); }
+  #stage { position: fixed; inset: 0; background: radial-gradient(circle at 50% 40%, #2a2e36, var(--bg) 70%); }
+  #stage canvas { display: block; touch-action: none; }
   .bar { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px; background: var(--bar); backdrop-filter: blur(8px); z-index: 2; }
+    padding: 10px 16px; background: var(--bar); backdrop-filter: blur(8px); z-index: 3; }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hint { color: var(--muted); font-size: 12px; }
+  .hint { color: var(--muted); font-size: 12px; white-space: nowrap; }
   button { background: transparent; color: var(--fg); border: 1px solid rgba(255,255,255,0.25);
     border-radius: 6px; padding: 4px 12px; font: inherit; cursor: pointer; }
   button:hover { border-color: var(--accent); }
   button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #0b1220; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #msg { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px;
     color: var(--muted); pointer-events: none; z-index: 1; }
   #msg.err { color: #ff8a8a; }
+
+  #panel { position: fixed; top: 52px; right: 12px; bottom: 12px; width: 272px; overflow-y: auto; z-index: 2;
+    padding: 14px; display: flex; flex-direction: column; gap: 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px); }
+  #panel h2 { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; font-weight: 700; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); padding: 6px 4px; font-size: 13px; }
+  .seg button:last-child { border-right: 0; }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .row { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; margin: 4px 0; }
+  .row span:last-child { text-align: right; font-family: Consolas, monospace; font-size: 12px; color: var(--muted); }
+  .row.dim { opacity: 0.4; }
+  .check { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  input[type="range"] { width: 100%; min-width: 0; accent-color: var(--accent); }
 </style>
 </head>
 <body>
+<div id="stage"></div>
 <div class="bar">
   <div class="name">{{NAME}}</div>
   <span class="hint">左鍵旋轉 · 滾輪縮放 · 右鍵平移</span>
   <button id="rotate" aria-pressed="true">自動旋轉</button>
   <button id="anim" hidden aria-pressed="false">播放動畫</button>
+  <button id="lightBtn" aria-pressed="false" aria-controls="panel">光線</button>
 </div>
+<aside id="panel" hidden>
+  <section>
+    <h2>光線預設</h2>
+    <div class="grid2" id="presets"></div>
+  </section>
+  <section>
+    <h2>顯示方式</h2>
+    <div class="seg" id="modes">
+      <button type="button" data-mode="lit" aria-pressed="false">上色</button>
+      <button type="button" data-mode="flat" aria-pressed="false">純顏色</button>
+      <button type="button" data-mode="toon" aria-pressed="false">風格 B</button>
+    </div>
+    <p class="note" id="modenote"></p>
+  </section>
+  <section>
+    <h2>打光</h2>
+    <label class="check"><input type="checkbox" id="attach"> 光線跟著鏡頭</label>
+    <div class="row" id="rowAz"><label for="az">水平角度</label><input type="range" id="az" min="-180" max="180" step="1"><span id="azv"></span></div>
+    <div class="row" id="rowEl"><label for="el">仰角</label><input type="range" id="el" min="-89" max="89" step="1"><span id="elv"></span></div>
+    <div class="row" id="rowI"><label for="dirI">亮度</label><input type="range" id="dirI" min="0" max="3" step="0.05"><span id="dirIv"></span></div>
+    <div class="row" id="rowA"><label for="amb">環境光</label><input type="range" id="amb" min="0" max="1.5" step="0.05"><span id="ambv"></span></div>
+    <div class="row" id="rowT"><label for="thr">明暗交界</label><input type="range" id="thr" min="-0.5" max="0.8" step="0.01"><span id="thrv"></span></div>
+    <div class="row" id="rowO"><label for="outline">描邊粗細</label><input type="range" id="outline" min="0" max="5" step="0.1"><span id="outlinev"></span></div>
+    <p class="note">按住 Shift 並在畫面上拖曳，可以直接轉動光源。</p>
+  </section>
+</aside>
 <div id="msg">載入中…</div>
-<model-viewer id="mv" src="model.glb" alt="{{NAME}}"
-  camera-controls touch-action="pan-y" auto-rotate
-  shadow-intensity="1" environment-image="neutral" exposure="1"
-  interaction-prompt="none"></model-viewer>
-<script>
-  const mv = document.getElementById('mv');
-  const msg = document.getElementById('msg');
-  const rotate = document.getElementById('rotate');
-  const anim = document.getElementById('anim');
 
-  mv.addEventListener('load', () => {
-    msg.hidden = true;
-    if (mv.availableAnimations && mv.availableAnimations.length) {
-      anim.hidden = false;
-    }
-  });
-  mv.addEventListener('error', () => {
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+<script src="GLTFLoader.js"></script>
+<script src="DRACOLoader.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const msg = $('msg');
+  const stage = $('stage');
+
+  function showError(text) {
     msg.hidden = false;
     msg.className = 'err';
-    msg.textContent = '無法載入模型。檔案可能已損毀，或使用了需要連網下載解碼器的壓縮格式。';
-  });
-  setTimeout(() => {
-    if (!customElements.get('model-viewer')) {
-      msg.className = 'err';
-      msg.textContent = '無法載入檢視元件，請重新安裝 glb-viewer。';
-    }
-  }, 8000);
+    msg.textContent = text;
+  }
 
-  rotate.addEventListener('click', () => {
-    const on = rotate.getAttribute('aria-pressed') !== 'true';
-    rotate.setAttribute('aria-pressed', String(on));
-    mv.autoRotate = on;
+  if (!window.THREE || !THREE.GLTFLoader || !THREE.OrbitControls || !THREE.DRACOLoader) {
+    showError('無法載入檢視元件，請重新安裝 glb-viewer。');
+    return;
+  }
+
+  /* ---------- 光線預設 ---------- */
+  // 角度是相對於畫面的方向：水平 0 度在鏡頭正前方，正值偏右；仰角正值偏上
+  const PRESETS = [
+    { id: 'studio',  name: '柔和攝影棚', mode: 'lit',  attach: true,  az: -35,  el: 35, dirI: 1.0, amb: 1.0 },
+    { id: 'noon',    name: '正午強光',   mode: 'lit',  attach: false, az: 30,   el: 70, dirI: 2.6, amb: 0.3 },
+    { id: 'rim',     name: '側逆光輪廓', mode: 'lit',  attach: true,  az: 135,  el: 20, dirI: 2.4, amb: 0.45 },
+    { id: 'toon',    name: '風格 B',     mode: 'toon', attach: true,  az: -32.7, el: 33.5, thr: 0.15, outline: 2.0 },
+  ];
+  // 每種顯示方式實際用到的參數，用來判斷目前是不是某組預設
+  const MODE_KEYS = {
+    lit: ['attach', 'az', 'el', 'dirI', 'amb'],
+    flat: [],
+    toon: ['attach', 'az', 'el', 'thr', 'outline'],
+  };
+  const state = Object.assign({ thr: 0.15, outline: 2.0, dirI: 1.0, amb: 1.0 }, PRESETS[0]);
+  delete state.id; delete state.name;
+
+  const SHADOW_TINT = [0.86, 0.72, 0.70];
+  const OUTLINE_SRGB = [0.634, 0.462, 0.272];
+
+  /* ---------- 渲染器與場景 ---------- */
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
+  } catch (e) {
+    showError('這個瀏覽器無法使用 WebGL，沒辦法顯示 3D 模型。');
+    return;
+  }
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
+  renderer.setClearColor(0x000000, 0);
+  stage.appendChild(renderer.domElement);
+  const canvas = renderer.domElement;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 200);
+  const sun = new THREE.DirectionalLight(0xffffff, state.dirI);
+  scene.add(sun, sun.target);
+
+  // 寫實模式用的環境光：一個灰色房間加幾塊發亮的面板，沒有外部圖片
+  function buildEnvironment() {
+    const env = new THREE.Scene();
+    const room = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ side: THREE.BackSide, color: new THREE.Color(0.32, 0.33, 0.35) }));
+    room.scale.setScalar(24);
+    env.add(room);
+    const panel = (w, h, x, y, z, power) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, color: new THREE.Color().setScalar(power) }));
+      m.position.set(x, y, z);
+      m.lookAt(0, 0, 0);
+      env.add(m);
+    };
+    panel(12, 12, 0, 11, 0, 7);
+    panel(7, 9, -10, 3, 5, 4);
+    panel(6, 8, 10, 2, -2, 2.2);
+    panel(12, 3, 0, 4, -11, 3);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const tex = pmrem.fromScene(env, 0.04).texture;
+    pmrem.dispose();
+    env.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+    return tex;
+  }
+  scene.environment = buildEnvironment();
+
+  /* ---------- 風格 B 的材質 ---------- */
+  const toonVS = `
+    #include <common>
+    #include <skinning_pars_vertex>
+    #include <morphtarget_pars_vertex>
+    varying vec3 vN; varying vec2 vUv; varying vec3 vC;
+    void main() {
+      #include <beginnormal_vertex>
+      #include <morphnormal_vertex>
+      #include <skinbase_vertex>
+      #include <skinnormal_vertex>
+      #include <defaultnormal_vertex>
+      vN = normalize(transformedNormal);
+      vUv = uv;
+      #ifdef USE_COLOR
+        vC = color.rgb;
+      #else
+        vC = vec3(1.0);
+      #endif
+      #include <begin_vertex>
+      #include <morphtarget_vertex>
+      #include <skinning_vertex>
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+    }`;
+  const toonFS = `
+    uniform sampler2D map; uniform bool hasMap; uniform vec3 baseColor; uniform float opacity; uniform float alphaCut;
+    uniform vec3 lightDir; uniform float thr; uniform vec3 tint;
+    varying vec3 vN; varying vec2 vUv; varying vec3 vC;
+    void main() {
+      vec3 lin = baseColor * vC;
+      float a = opacity;
+      if (hasMap) {
+        vec4 tex = texture2D(map, vUv);
+        lin *= pow(tex.rgb, vec3(2.2));
+        a *= tex.a;
+      }
+      if (a < alphaCut) discard;
+      vec3 n = normalize(vN);
+      #ifdef DOUBLE_SIDED
+        if (!gl_FrontFacing) n = -n;
+      #endif
+      float ndl = dot(n, lightDir);
+      float t = smoothstep(thr - 0.015, thr + 0.015, ndl);
+      vec3 shaded = lin * mix(tint, vec3(1.0), t);
+      gl_FragColor = vec4(pow(shaded, vec3(1.0 / 2.2)), 1.0);
+    }`;
+  const outlineVS = `
+    #include <common>
+    #include <skinning_pars_vertex>
+    #include <morphtarget_pars_vertex>
+    uniform float thick; uniform vec2 res;
+    void main() {
+      #include <beginnormal_vertex>
+      #include <morphnormal_vertex>
+      #include <skinbase_vertex>
+      #include <skinnormal_vertex>
+      #include <begin_vertex>
+      #include <morphtarget_vertex>
+      #include <skinning_vertex>
+      vec4 p = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+      vec4 cn = projectionMatrix * vec4(normalMatrix * objectNormal, 0.0);
+      vec2 d = cn.xy; float l = length(d);
+      if (l > 1e-5) d /= l;
+      p.xy += d * thick * 2.0 / res * p.w;
+      gl_Position = p;
+    }`;
+  const outlineFS = `uniform vec3 col; void main() { gl_FragColor = vec4(col, 1.0); }`;
+
+  const toonUniforms = [];   // 所有風格 B 材質共用的數值，每次重畫前更新
+  const outlineUniforms = [];
+
+  function makeVariants(mesh) {
+    const src = mesh.material;
+    const map = src.map || null;
+    if (map) map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const geo = mesh.geometry;
+    const vc = !!src.vertexColors && !!geo.attributes.color;
+    const color = src.color ? src.color.clone() : new THREE.Color(1, 1, 1);
+    const morph = { skinning: !!mesh.isSkinnedMesh, morphTargets: !!(geo.morphAttributes && geo.morphAttributes.position),
+      morphNormals: !!(geo.morphAttributes && geo.morphAttributes.normal) };
+    const opacity = src.opacity === undefined ? 1 : src.opacity;
+    const alphaCut = src.alphaTest > 0 ? src.alphaTest : (src.transparent ? 0.5 : 0.0);
+
+    const toonMat = new THREE.ShaderMaterial(Object.assign({
+      vertexShader: toonVS, fragmentShader: toonFS, vertexColors: vc, side: src.side,
+      uniforms: {
+        map: { value: map }, hasMap: { value: !!map }, baseColor: { value: new THREE.Vector3(color.r, color.g, color.b) },
+        opacity: { value: opacity }, alphaCut: { value: alphaCut },
+        lightDir: { value: new THREE.Vector3(0, 0, 1) }, thr: { value: state.thr }, tint: { value: new THREE.Vector3(...SHADOW_TINT) },
+      },
+    }, morph));
+    const outlineMat = new THREE.ShaderMaterial(Object.assign({
+      vertexShader: outlineVS, fragmentShader: outlineFS, side: THREE.BackSide,
+      uniforms: { thick: { value: 2 }, res: { value: new THREE.Vector2(1, 1) }, col: { value: new THREE.Vector3(...OUTLINE_SRGB) } },
+    }, morph));
+    toonUniforms.push(toonMat.uniforms);
+    outlineUniforms.push(outlineMat.uniforms);
+
+    const flatMat = new THREE.MeshBasicMaterial({
+      map, color, vertexColors: !!src.vertexColors, side: src.side, opacity, transparent: src.transparent,
+      alphaTest: src.alphaTest, toneMapped: false,
+    });
+    return { lit: src, flat: flatMat, toon: toonMat, outlineMat };
+  }
+
+  /* ---------- 模型 ---------- */
+  let root = null;
+  let meshes = [];
+  let mixer = null;
+  let actions = [];
+  let playing = false;
+  let radius = 1;
+
+  function setModel(gltf) {
+    const model = gltf.scene;
+    model.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    if (!meshes.length) { meshes = []; showError('這個檔案裡沒有網格。'); return; }
+    root = new THREE.Group();
+    root.add(model);
+    scene.add(root);
+    root.updateMatrixWorld(true);
+
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    model.position.sub(box.getCenter(new THREE.Vector3()));
+    root.updateMatrixWorld(true);
+    radius = Math.max(size.length() / 2, 1e-6);
+
+    meshes.forEach((m) => {
+      if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals();
+      const v = makeVariants(m);
+      m.userData.variants = v;
+      let outline;
+      if (m.isSkinnedMesh) {
+        outline = new THREE.SkinnedMesh(m.geometry, v.outlineMat);
+        outline.bind(m.skeleton, m.bindMatrix);
+        m.frustumCulled = false;
+      } else {
+        outline = new THREE.Mesh(m.geometry, v.outlineMat);
+      }
+      outline.frustumCulled = false;
+      if (m.morphTargetInfluences) {
+        outline.morphTargetInfluences = m.morphTargetInfluences;
+        outline.morphTargetDictionary = m.morphTargetDictionary;
+      }
+      m.add(outline);
+      m.userData.outline = outline;
+    });
+
+    if (gltf.animations && gltf.animations.length) {
+      mixer = new THREE.AnimationMixer(model);
+      actions = gltf.animations.map((clip) => { const a = mixer.clipAction(clip); a.play(); a.paused = true; return a; });
+      $('anim').hidden = false;
+    }
+
+    msg.hidden = true;
+    applyMode();
+    resetView();
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    actions.forEach((a) => { a.paused = !on; });
+    $('anim').setAttribute('aria-pressed', String(on));
+    need();
+  }
+
+  function applyMode() {
+    meshes.forEach((m) => {
+      m.material = m.userData.variants[state.mode];
+      // 鏤空與半透明的材質，描邊會畫成整塊實心的外殼，所以不描邊
+      const src = m.userData.variants.lit;
+      const cutout = src.transparent || src.alphaTest > 0;
+      m.userData.outline.visible = state.mode === 'toon' && state.outline > 0 && !cutout;
+    });
+    need();
+    syncControls();
+  }
+
+  /* ---------- 視角 ---------- */
+  function resetView() {
+    const dir = new THREE.Vector3(0, 0.18, 1).normalize();
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const fitV = radius / Math.sin(fov / 2);
+    const fitH = radius / Math.sin(Math.atan(Math.tan(fov / 2) * camera.aspect));
+    const dist = Math.max(fitV, fitH) * 1.05;
+    controls.target.set(0, 0, 0);
+    camera.position.copy(dir.multiplyScalar(dist));
+    camera.near = dist / 100; camera.far = dist * 20; camera.updateProjectionMatrix();
+    controls.minDistance = radius * 0.3; controls.maxDistance = dist * 6;
+    controls.update();
+    need();
+  }
+
+  /* ---------- 光線 ---------- */
+  function angleToDir(az, el, out = new THREE.Vector3()) {
+    const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el);
+    return out.set(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a));
+  }
+  function dirToAngle(d) {
+    return { el: THREE.MathUtils.radToDeg(Math.asin(Math.max(-1, Math.min(1, d.y)))), az: THREE.MathUtils.radToDeg(Math.atan2(d.x, d.z)) };
+  }
+
+  // 為了不在沒操作時一直吃顯卡，只在有變動時才重畫
+  let dirty = true;
+  function need() { dirty = true; }
+
+  const clock = new THREE.Clock();
+  function loop() {
+    const dt = clock.getDelta();
+    if (controls.autoRotate) controls.update();
+    if (mixer && playing) { mixer.update(dt); need(); }
+    if (dirty) { dirty = false; render(); }
+    requestAnimationFrame(loop);
+  }
+
+  const worldDir = new THREE.Vector3();
+  const viewDir = new THREE.Vector3();
+  const canvasSize = new THREE.Vector2();
+  function render() {
+    camera.updateMatrixWorld();
+    angleToDir(state.az, state.el, worldDir);
+    if (state.attach) { viewDir.copy(worldDir); worldDir.applyQuaternion(camera.quaternion); }
+    else { viewDir.copy(worldDir).transformDirection(camera.matrixWorldInverse); }
+    if (state.mode === 'lit') {
+      sun.position.copy(worldDir).multiplyScalar(10);
+      sun.intensity = state.dirI;
+      meshes.forEach((m) => {
+        const lit = m.userData.variants.lit;
+        if ('envMapIntensity' in lit) lit.envMapIntensity = state.amb;
+      });
+    } else if (state.mode === 'toon') {
+      const pr = renderer.getPixelRatio();
+      renderer.getSize(canvasSize);
+      toonUniforms.forEach((u) => { u.lightDir.value.copy(viewDir); u.thr.value = state.thr; });
+      outlineUniforms.forEach((u) => { u.thick.value = state.outline * pr; u.res.value.set(canvasSize.x * pr, canvasSize.y * pr); });
+    }
+    renderer.render(scene, camera);
+  }
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    need();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  /* ---------- 互動 ---------- */
+  // 按住 Shift 拖曳要轉動光源，所以先掛自己的監聽，再建立控制器，才能攔住控制器的拖曳
+  let lightDrag = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!e.shiftKey || e.button !== 0) return;
+    e.stopImmediatePropagation();
+    lightDrag = { x: e.clientX, y: e.clientY };
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
   });
-  anim.addEventListener('click', () => {
-    const on = anim.getAttribute('aria-pressed') !== 'true';
-    anim.setAttribute('aria-pressed', String(on));
-    if (on) { mv.play(); } else { mv.pause(); }
+  canvas.addEventListener('pointermove', (e) => {
+    if (!lightDrag) return;
+    state.az = ((state.az + (e.clientX - lightDrag.x) * 0.6 + 540) % 360) - 180;
+    state.el = Math.max(-89, Math.min(89, state.el - (e.clientY - lightDrag.y) * 0.6));
+    lightDrag = { x: e.clientX, y: e.clientY };
+    syncControls();
+    need();
   });
+  const endDrag = (e) => { if (lightDrag) { lightDrag = null; try { canvas.releasePointerCapture(e.pointerId); } catch (_) {} } };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.screenSpacePanning = true;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 5;
+  controls.addEventListener('change', () => need());
+
+  /* ---------- 控制項 ---------- */
+  const NOTES = {
+    lit: '保留模型原本的材質，用內建的攝影棚環境光加一盞方向光。',
+    flat: '沒有光影，只顯示貼圖原本的顏色，檢查上色用。',
+    toon: '近似版：兩階明暗加描邊，細節和 Blender 渲染會有差異。',
+  };
+
+  function presetMatches(p) {
+    if (p.mode !== state.mode) return false;
+    // 角度的滑桿一格是 1 度，其餘最細一格是 0.01
+    return MODE_KEYS[p.mode].every((k) => (typeof p[k] === 'number' ? Math.abs(p[k] - state[k]) < (k === 'az' || k === 'el' ? 0.5 : 0.005) : p[k] === state[k]));
+  }
+
+  function syncControls() {
+    $('attach').checked = state.attach;
+    [['az', state.az, '°'], ['el', state.el, '°'], ['dirI', state.dirI, ''], ['amb', state.amb, ''], ['thr', state.thr, ''], ['outline', state.outline, '']].forEach(([id, v, unit]) => {
+      $(id).value = v;
+      $(id + 'v').textContent = (Number.isInteger(+v) ? Math.round(v) : (+v).toFixed(2)) + unit;
+    });
+    const used = MODE_KEYS[state.mode];
+    [['rowAz', 'az'], ['rowEl', 'el'], ['rowI', 'dirI'], ['rowA', 'amb'], ['rowT', 'thr'], ['rowO', 'outline']].forEach(([row, key]) => {
+      const on = used.includes(key);
+      $(row).classList.toggle('dim', !on);
+      $(row).querySelector('input').disabled = !on;
+    });
+    $('attach').disabled = !used.includes('attach');
+    document.querySelectorAll('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)));
+    document.querySelectorAll('#presets button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(presetMatches(PRESETS.find((p) => p.id === b.dataset.preset))));
+    });
+    $('modenote').textContent = NOTES[state.mode];
+  }
+
+  PRESETS.forEach((p) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.preset = p.id; b.textContent = p.name; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => {
+      const { id, name, ...values } = p;
+      Object.assign(state, values);
+      applyMode();
+    });
+    $('presets').append(b);
+  });
+
+  ['az', 'el', 'dirI', 'amb', 'thr', 'outline'].forEach((id) => {
+    $(id).addEventListener('input', () => {
+      state[id] = parseFloat($(id).value);
+      if (id === 'outline') applyMode(); else { syncControls(); need(); }
+    });
+  });
+  $('attach').addEventListener('change', () => {
+    // 切換時保持目前看到的光線方向，不讓畫面突然跳動
+    camera.updateMatrixWorld();
+    const dir = angleToDir(state.az, state.el);
+    const out = $('attach').checked ? dir.transformDirection(camera.matrixWorldInverse) : dir.applyQuaternion(camera.quaternion);
+    state.attach = $('attach').checked;
+    Object.assign(state, dirToAngle(out));
+    syncControls(); need();
+  });
+  $('modes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.mode = b.dataset.mode; applyMode(); } });
+
+  $('lightBtn').addEventListener('click', () => {
+    const open = $('panel').hidden;
+    $('panel').hidden = !open;
+    $('lightBtn').setAttribute('aria-pressed', String(open));
+  });
+  $('rotate').addEventListener('click', () => {
+    const on = $('rotate').getAttribute('aria-pressed') !== 'true';
+    $('rotate').setAttribute('aria-pressed', String(on));
+    controls.autoRotate = on;
+  });
+  $('anim').addEventListener('click', () => setPlaying($('anim').getAttribute('aria-pressed') !== 'true'));
+
+  /* ---------- 載入 ---------- */
+  function explainError(err) {
+    const text = String((err && err.message) || err || '');
+    if (/KTX2/i.test(text)) return '這個模型使用 KTX2 貼圖壓縮，目前不支援。';
+    if (/meshopt/i.test(text)) return '這個模型使用 Meshopt 壓縮，目前不支援。';
+    if (/draco/i.test(text)) return '這個模型使用 Draco 壓縮，需要連網下載解碼器，但目前下載失敗。';
+    return '無法載入模型。檔案可能已損毀、使用了不支援的格式，或是 Draco 壓縮的模型但無法連網下載解碼器。';
+  }
+
+  const draco = new THREE.DRACOLoader();
+  draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+  const loader = new THREE.GLTFLoader();
+  loader.setDRACOLoader(draco);
+  loader.load('model.glb', setModel, undefined, (err) => showError(explainError(err)));
+
+  syncControls();
+  resize();
+  loop();
+  window.__viewer = { state, get meshes() { return meshes; }, need, setPlaying, camera, scene };
 
   // 視窗關閉時通知伺服器結束；重新整理則會取消結束。
   window.addEventListener('pagehide', () => navigator.sendBeacon('bye'));
   setInterval(() => fetch('ping').catch(() => {}), 5000);
+})();
 </script>
 </body>
 </html>
