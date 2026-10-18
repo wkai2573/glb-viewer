@@ -18,9 +18,10 @@ function Assert-That([string]$Name, [bool]$Condition, [string]$Detail = '') {
     }
 }
 
-function Start-Viewer([string]$Script = $serverScript) {
+function Start-Viewer([string]$Script = $serverScript, [string[]]$Extra = @()) {
     $out = [IO.Path]::GetTempFileName()
     $argLine = "-NoProfile -ExecutionPolicy Bypass -File `"$Script`" -Path `"$sample`" -NoLaunch"
+    foreach ($e in $Extra) { $argLine += " `"$e`"" }
     $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList $argLine `
         -RedirectStandardOutput $out -PassThru -WindowStyle Hidden
     $server = [pscustomobject]@{ Proc = $proc; Url = $null; Out = $out }
@@ -49,6 +50,49 @@ function Wait-Exit($Proc, [int]$Seconds) {
     $Proc.WaitForExit($Seconds * 1000)
 }
 
+# 呼叫更新相關的介面，回傳狀態碼與解析後的 JSON 內容
+function Invoke-Api([string]$Url, [string]$Method = 'GET') {
+    $status = 0; $body = ''
+    try {
+        $r = Invoke-WebRequest -Uri $Url -Method $Method -UseBasicParsing
+        $status = [int]$r.StatusCode; $body = $r.Content
+    } catch {
+        if ($_.Exception.Response) {
+            $status = [int]$_.Exception.Response.StatusCode
+            # Invoke-WebRequest 已經讀走回應串流，錯誤時的內容放在 ErrorDetails
+            if ($_.ErrorDetails) { $body = $_.ErrorDetails.Message }
+        } else { $status = -1 }
+    }
+    $json = $null
+    try { if ($body) { $json = $body | ConvertFrom-Json } } catch { }
+    [pscustomobject]@{ Status = $status; Json = $json }
+}
+
+# 在暫存資料夾裡做出一份假的遠端：一個 VERSION 檔，和一個結構與 GitHub 下載的 zip 相同的原始碼壓縮檔
+function Set-Remote([string]$Dir, [string]$Version, [string]$ZipVersion = $Version, [string]$Omit = '') {
+    Set-Content -LiteralPath (Join-Path $Dir 'VERSION') -Value $Version
+    $stage = Join-Path $Dir 'stage'
+    Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    $top = Join-Path $stage 'glb-viewer-main'
+    New-Item -ItemType Directory -Path (Join-Path $top 'src') -Force | Out-Null
+    Copy-Item -Path (Join-Path $root 'src\*') -Destination (Join-Path $top 'src') -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $root 'install.ps1'), (Join-Path $root 'uninstall.ps1') -Destination $top
+    Set-Content -LiteralPath (Join-Path $top 'VERSION') -Value $ZipVersion
+    if ($Omit) { Remove-Item -LiteralPath (Join-Path $top $Omit) -Force }
+    $zip = Join-Path $Dir 'source.zip'
+    Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)
+}
+
+function Get-FileUri([string]$Path) { ([Uri]$Path).AbsoluteUri }
+
+$repoVersion = ''
+$versionPath = Join-Path $root 'VERSION'
+if (Test-Path -LiteralPath $versionPath) { $repoVersion = (Get-Content -LiteralPath $versionPath -Raw).Trim() }
+$realCmdKey = 'HKCU:\Software\Classes\GlbViewer.File\shell\open\command'
+$realCmdBefore = if (Test-Path $realCmdKey) { (Get-ItemProperty $realCmdKey).'(default)' } else { $null }
+
 try {
     Write-Host '伺服器介面'
     $s = Start-Viewer
@@ -68,6 +112,13 @@ try {
         $wrong = $s.Url -replace '/[0-9a-f]{32}/$', '/wrong/'
         Assert-That '路徑前綴錯誤時回 404' ((Get-Status ($wrong + 'model.glb')) -eq 404)
         Assert-That '不存在的路由回 404' ((Get-Status ($s.Url + 'nope')) -eq 404)
+
+        Write-Host '版本（開發模式）'
+        Assert-That '版本檔存在且格式是三段數字' ($repoVersion -match '^\d+\.\d+\.\d+$') "[$repoVersion]"
+        Assert-That '首頁顯示目前版本號' ($page.Content -match [regex]::Escape("v$repoVersion"))
+        Assert-That '首頁不含任何未取代的樣板標記' ($page.Content -notmatch '\{\{[A-Z]+\}\}')
+        Assert-That '開發模式不能檢查更新' ((Invoke-Api ($s.Url + 'update/check')).Status -eq 403)
+        Assert-That '開發模式不能執行更新' ((Invoke-Api ($s.Url + 'update/apply') 'POST').Status -eq 403)
 
         Write-Host '離線元件'
         $srcs = @([regex]::Matches($page.Content, '<script[^>]*\ssrc="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
@@ -111,7 +162,7 @@ try {
     & powershell.exe @common $installer @opts -NoOpenSettings | Out-Null
     Assert-That '安裝成功結束' ($LASTEXITCODE -eq 0)
 
-    $expected = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt', 'uninstall.ps1'
+    $expected = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt', 'uninstall.ps1', 'VERSION'
     $missing = $expected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $installDir $_)) }
     Assert-That '安裝資料夾含有所有必要檔案' (-not $missing) ($missing -join ', ')
 
@@ -123,11 +174,79 @@ try {
     $registered = (Test-Path $withKey) -and ((Get-Item $withKey).Property -contains 'GlbViewer.File')
     Assert-That '.glb 已登錄為可選的開啟程式' $registered
 
-    $installed = Start-Viewer (Join-Path $installDir 'GlbViewer.ps1')
+    $verFile = Join-Path $installDir 'VERSION'
+    $installedVersion = if (Test-Path -LiteralPath $verFile) { (Get-Content -LiteralPath $verFile -Raw).Trim() } else { '' }
+    Assert-That '安裝資料夾的版本檔與原始碼一致' ($repoVersion -and $installedVersion -eq $repoVersion) "[$installedVersion]"
+
+    # 模擬安裝的是舊版，遠端另有新版
+    Set-Content -LiteralPath $verFile -Value '0.0.1'
+    $remoteDir = Join-Path ([IO.Path]::GetTempPath()) ('glbviewer-remote-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $remoteDir | Out-Null
+    Set-Remote $remoteDir '9.9.9'
+    $remoteArgs = @('-VersionUrl', (Get-FileUri (Join-Path $remoteDir 'VERSION')), '-ZipUrl', (Get-FileUri (Join-Path $remoteDir 'source.zip')))
+
+    $installed = Start-Viewer (Join-Path $installDir 'GlbViewer.ps1') $remoteArgs
     if ($installed.Url) {
         $js2 = $null
         try { $js2 = Invoke-WebRequest -Uri ($installed.Url + 'three.min.js') -UseBasicParsing } catch { }
         Assert-That '安裝後的副本可獨立運作' ($js2 -and $js2.StatusCode -eq 200)
+
+        Write-Host '更新'
+        $home2 = Invoke-WebRequest -Uri $installed.Url -UseBasicParsing
+        Assert-That '安裝後的首頁顯示安裝的版本號' ($home2.Content -match 'v0\.0\.1')
+
+        $chk = Invoke-Api ($installed.Url + 'update/check')
+        Assert-That '有新版時檢查會回報最新版本' ($chk.Status -eq 200 -and $chk.Json.current -eq '0.0.1' -and $chk.Json.latest -eq '9.9.9' -and $chk.Json.newer -eq $true) "$($chk.Status)"
+        Assert-That '更新只接受 POST' ((Invoke-Api ($installed.Url + 'update/apply')).Status -eq 405)
+
+        Set-Content -LiteralPath (Join-Path $installDir 'viewer.html') -Value 'old'
+        $psHash = (Get-FileHash -LiteralPath (Join-Path $installDir 'GlbViewer.ps1')).Hash
+
+        Set-Remote $remoteDir '9.9.9' '0.0.1'
+        $bad = Invoke-Api ($installed.Url + 'update/apply') 'POST'
+        Assert-That '下載的內容版本不是新版時拒絕更新' ($bad.Status -eq 409 -and $bad.Json.ok -eq $false) "$($bad.Status)"
+
+        Set-Remote $remoteDir '9.9.9' '9.9.9' 'src\GLTFLoader.js'
+        $bad = Invoke-Api ($installed.Url + 'update/apply') 'POST'
+        Assert-That '下載的內容缺少必要檔案時更新失敗' ($bad.Status -eq 500 -and $bad.Json.ok -eq $false) "$($bad.Status)"
+        Assert-That '更新失敗時安裝的檔案原封不動' (((Get-Content -LiteralPath $verFile -Raw).Trim() -eq '0.0.1') -and ((Get-FileHash -LiteralPath (Join-Path $installDir 'GlbViewer.ps1')).Hash -eq $psHash) -and ((Get-Content -LiteralPath (Join-Path $installDir 'viewer.html') -Raw).Trim() -eq 'old'))
+
+        # 複製到一半失敗（目標檔案被鎖住，只能讀不能寫）時，要還原成更新前的樣子
+        $snapshot = { Get-ChildItem -LiteralPath $installDir -File | Sort-Object Name | ForEach-Object { $_.Name + ':' + (Get-FileHash -LiteralPath $_.FullName).Hash } }
+        $before = & $snapshot
+        Set-Remote $remoteDir '9.9.9'
+        $lock = [IO.File]::Open((Join-Path $installDir 'DRACOLoader.js'), 'Open', 'Read', 'Read')
+        try { $locked = Invoke-Api ($installed.Url + 'update/apply') 'POST' } finally { $lock.Dispose() }
+        Assert-That '複製途中失敗時更新回報失敗' ($locked.Status -eq 500 -and $locked.Json.ok -eq $false) "$($locked.Status)"
+        Assert-That '複製途中失敗時已複製的檔案會還原' ((@(& $snapshot) -join '|') -eq (@($before) -join '|'))
+        Assert-That '更新失敗後不會留下暫存資料夾' (-not (Get-ChildItem -LiteralPath $installDir -Directory))
+
+        Set-Content -LiteralPath $verFile -Value 'broken'
+        Assert-That '本機版本檔損毀時檢查回 500' ((Invoke-Api ($installed.Url + 'update/check')).Status -eq 500)
+        Set-Content -LiteralPath $verFile -Value '0.0.1'
+
+        Rename-Item -LiteralPath (Join-Path $remoteDir 'VERSION') -NewName 'VERSION.gone'
+        Assert-That '連不上遠端時檢查回 502' ((Invoke-Api ($installed.Url + 'update/check')).Status -eq 502)
+        Set-Content -LiteralPath (Join-Path $remoteDir 'VERSION') -Value 'not a version'
+        Assert-That '遠端版本號格式不對時檢查回 502' ((Invoke-Api ($installed.Url + 'update/check')).Status -eq 502)
+        Remove-Item -LiteralPath (Join-Path $remoteDir 'VERSION.gone') -Force
+
+        Set-Remote $remoteDir '0.0.1'
+        $same = Invoke-Api ($installed.Url + 'update/check')
+        Assert-That '遠端版本相同時回報已是最新' ($same.Status -eq 200 -and $same.Json.newer -eq $false)
+        Assert-That '已是最新時拒絕更新' ((Invoke-Api ($installed.Url + 'update/apply') 'POST').Status -eq 409)
+
+        Set-Remote $remoteDir '9.9.9'
+        $ok = Invoke-Api ($installed.Url + 'update/apply') 'POST'
+        Assert-That '有新版時更新成功' ($ok.Status -eq 200 -and $ok.Json.ok -eq $true -and $ok.Json.version -eq '9.9.9') "$($ok.Status)"
+        Assert-That '更新後版本檔是新版本' ((Get-Content -LiteralPath $verFile -Raw).Trim() -eq '9.9.9')
+        Assert-That '更新後檔案已換成新的內容' ((Get-FileHash -LiteralPath (Join-Path $installDir 'viewer.html')).Hash -eq (Get-FileHash -LiteralPath (Join-Path $root 'src\viewer.html')).Hash)
+        $gone = $expected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $installDir $_)) }
+        Assert-That '更新後所有必要檔案仍在' (-not $gone) ($gone -join ', ')
+        $after = Invoke-Api ($installed.Url + 'update/check')
+        Assert-That '更新後再檢查會回報已是最新' ($after.Status -eq 200 -and $after.Json.current -eq '9.9.9' -and $after.Json.newer -eq $false)
+        Assert-That '更新不會動到系統登錄項目' ($realCmdBefore -eq $(if (Test-Path $realCmdKey) { (Get-ItemProperty $realCmdKey).'(default)' } else { $null }))
+
         Invoke-WebRequest -Uri ($installed.Url + 'bye') -UseBasicParsing | Out-Null
         Wait-Exit $installed.Proc 8 | Out-Null
     } else {
@@ -151,6 +270,7 @@ try {
 } finally {
     Remove-Item -LiteralPath 'HKCU:\Software\GlbViewerTest' -Recurse -Force -ErrorAction SilentlyContinue
     if ($installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($remoteDir) { Remove-Item -LiteralPath $remoteDir -Recurse -Force -ErrorAction SilentlyContinue }
     foreach ($srv in $script:servers) {
         if ($srv.Proc -and -not $srv.Proc.HasExited) { Stop-Process -Id $srv.Proc.Id -Force -ErrorAction SilentlyContinue }
         Remove-Item -LiteralPath $srv.Out -Force -ErrorAction SilentlyContinue

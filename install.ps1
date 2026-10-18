@@ -5,7 +5,10 @@ param(
     [string]$ClassesRoot = 'HKCU:\Software\Classes',
     [string]$Repo = 'wkai2573/glb-viewer',
     [string]$Ref = 'main',
-    [switch]$NoOpenSettings
+    [switch]$NoOpenSettings,
+    # 只覆蓋檔案，不動登錄項目也不開設定頁。檢視器內的更新按鈕會用它呼叫新版下載回來的安裝腳本，
+    # 所以這個參數與 -InstallDir 必須維持相容。
+    [switch]$UpdateOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,14 +36,50 @@ try {
         $srcDir = Join-Path (Get-ChildItem -LiteralPath $temp -Directory | Select-Object -First 1).FullName 'src'
     }
 
-    $missing = $required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $srcDir $_)) }
+    # 專案根目錄的檔案，一起裝進安裝資料夾
+    $rootDir = Split-Path $srcDir -Parent
+    $rootFiles = 'uninstall.ps1', 'VERSION'
+
+    # 全部確認齊全才開始複製，缺檔時不會留下半套
+    $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $srcDir $_)) }) +
+        @($rootFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $rootDir $_)) })
     if ($missing) { throw "來源缺少檔案：$($missing -join ', ')" }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    foreach ($name in $required) {
-        Copy-Item -LiteralPath (Join-Path $srcDir $name) -Destination (Join-Path $InstallDir $name) -Force
+
+    # 先全部複製到暫存資料夾並備份現有的檔案，覆蓋到一半失敗就還原，不會留下新舊混雜的安裝。
+    # 版本檔排在最後，它代表整套檔案都已換好。
+    $plan = @($required | ForEach-Object { @{ Name = $_; From = (Join-Path $srcDir $_) } }) +
+        @($rootFiles | ForEach-Object { @{ Name = $_; From = (Join-Path $rootDir $_) } })
+    $stage = Join-Path $InstallDir ('.update-' + [guid]::NewGuid().ToString('N'))
+    $stageNew = Join-Path $stage 'new'
+    $stageOld = Join-Path $stage 'old'
+    New-Item -ItemType Directory -Path $stageNew, $stageOld -Force | Out-Null
+    try {
+        foreach ($f in $plan) { Copy-Item -LiteralPath $f.From -Destination (Join-Path $stageNew $f.Name) }
+        $touched = @()
+        try {
+            foreach ($f in $plan) {
+                $target = Join-Path $InstallDir $f.Name
+                $existed = Test-Path -LiteralPath $target
+                if ($existed) { Copy-Item -LiteralPath $target -Destination (Join-Path $stageOld $f.Name) }
+                $touched += @{ Name = $f.Name; Existed = $existed }
+                Copy-Item -LiteralPath (Join-Path $stageNew $f.Name) -Destination $target -Force
+            }
+        } catch {
+            $failure = $_
+            foreach ($t in $touched) {
+                $target = Join-Path $InstallDir $t.Name
+                try {
+                    if ($t.Existed) { Copy-Item -LiteralPath (Join-Path $stageOld $t.Name) -Destination $target -Force }
+                    else { Remove-Item -LiteralPath $target -Force }
+                } catch { }
+            }
+            throw $failure
+        }
+    } finally {
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Copy-Item -LiteralPath (Join-Path (Split-Path $srcDir -Parent) 'uninstall.ps1') -Destination (Join-Path $InstallDir 'uninstall.ps1') -Force
 
     # 舊版用過、現在不再需要的檔案
     foreach ($name in 'model-viewer.min.js', 'model-viewer.LICENSE.txt') {
@@ -48,6 +87,11 @@ try {
     }
 } finally {
     if ($temp) { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+if ($UpdateOnly) {
+    Write-Host "已更新 $InstallDir"
+    exit 0
 }
 
 $progKey = "$ClassesRoot\$progId"
