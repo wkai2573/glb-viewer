@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>GLB 檢視器</title>
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a4f2ff"/>
+      <stop offset="1" stop-color="#4fd1f0"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22aedd"/>
+      <stop offset="1" stop-color="#0f82b4"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d6fa1"/>
+      <stop offset="1" stop-color="#084c74"/>
+    </linearGradient>
+  </defs>
+  <g stroke-linejoin="round" stroke-width="12">
+    <polygon points="128,22 222,76 128,130 34,76" fill="url(#top)" stroke="url(#top)"/>
+    <polygon points="34,76 128,130 128,234 34,180" fill="url(#left)" stroke="url(#left)"/>
+    <polygon points="128,130 222,76 222,180 128,234" fill="url(#right)" stroke="url(#right)"/>
+  </g>
+  <path d="M34 76 L128 130 L222 76 M128 130 L128 234" fill="none" stroke="#e4fbff" stroke-opacity="0.6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

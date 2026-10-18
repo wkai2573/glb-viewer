@@ -3,7 +3,9 @@
     [switch]$NoLaunch,
     # 更新來源。平常用預設值指向 GitHub，測試時改指向本機檔案。
     [string]$VersionUrl = 'https://raw.githubusercontent.com/wkai2573/glb-viewer/main/VERSION',
-    [string]$ZipUrl = 'https://github.com/wkai2573/glb-viewer/archive/refs/heads/main.zip'
+    [string]$ZipUrl = 'https://github.com/wkai2573/glb-viewer/archive/refs/heads/main.zip',
+    # 更新時交給安裝腳本寫入的登錄位置。平常用預設值，測試時改指向測試專用的位置。
+    [string]$ClassesRoot = 'HKCU:\Software\Classes'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,7 +82,7 @@ function Invoke-UpdateApply {
         if (-not (Test-Path -LiteralPath $installer)) { throw '下載的內容沒有安裝腳本。' }
         # 子程序寫到標準錯誤時，Windows PowerShell 5.1 在 Stop 模式下會直接丟例外，改成只看結束碼
         $ErrorActionPreference = 'Continue'
-        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -InstallDir $PSScriptRoot -UpdateOnly 2>&1
+        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -InstallDir $PSScriptRoot -ClassesRoot $ClassesRoot -UpdateOnly 2>&1
         $exit = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
         if ($exit -ne 0) { throw "安裝失敗：$(($out | Out-String).Trim())" }
@@ -107,6 +109,7 @@ $scripts = @{}
 foreach ($js in 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js') {
     $scripts[$js] = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $js))
 }
+$icon = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'GlbViewer.ico'))
 $page = $template.Replace('{{NAME}}', [Net.WebUtility]::HtmlEncode($name)).
     Replace('{{VERSION}}', $(if ($v = Get-LocalVersion) { $v.ToString() } else { '?' })).
     Replace('{{CANUPDATE}}', $canUpdate.ToString().ToLower())
@@ -190,6 +193,11 @@ try {
                         }
                         'ping' { $res.StatusCode = 204 }
                         'bye'  { $byeAt = Get-Date; $res.StatusCode = 204 }
+                        'GlbViewer.ico' {
+                            $res.ContentType = 'image/x-icon'
+                            $res.ContentLength64 = $icon.Length
+                            $res.OutputStream.Write($icon, 0, $icon.Length)
+                        }
                         default {
                             if ($scripts.ContainsKey($route)) {
                                 $bytes = $scripts[$route]

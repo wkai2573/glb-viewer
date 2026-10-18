@@ -3,3 +3,4 @@ src/GLTFLoader.js -text
 src/DRACOLoader.js -text
 src/OrbitControls.js -text
 *.glb binary
+*.ico binary

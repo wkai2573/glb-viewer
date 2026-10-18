@@ -92,6 +92,8 @@ $versionPath = Join-Path $root 'VERSION'
 if (Test-Path -LiteralPath $versionPath) { $repoVersion = (Get-Content -LiteralPath $versionPath -Raw).Trim() }
 $realCmdKey = 'HKCU:\Software\Classes\GlbViewer.File\shell\open\command'
 $realCmdBefore = if (Test-Path $realCmdKey) { (Get-ItemProperty $realCmdKey).'(default)' } else { $null }
+$realClsidKey = 'HKCU:\Software\Classes\CLSID\{6F1C2D8B-3A47-4E5B-9C0D-2B7A5E4F1D93}'
+$realClsidBefore = Test-Path $realClsidKey
 
 try {
     Write-Host '伺服器介面'
@@ -133,6 +135,13 @@ try {
         Assert-That '核心與解碼載入器都有引用' (($srcs -contains 'three.min.js') -and ($srcs -contains 'GLTFLoader.js') -and ($srcs -contains 'DRACOLoader.js') -and ($srcs -contains 'OrbitControls.js'))
         Assert-That '舊的顯示元件不再被提供' ((Get-Status ($s.Url + 'model-viewer.min.js')) -eq 404)
         Assert-That '腳本以外的檔案不會被提供' ((Get-Status ($s.Url + 'GlbViewer.ps1')) -eq 404)
+
+        Write-Host '網站圖示'
+        $ico = Invoke-WebRequest -Uri ($s.Url + 'GlbViewer.ico') -UseBasicParsing
+        $icoSource = [IO.File]::ReadAllBytes((Join-Path $root 'src\GlbViewer.ico'))
+        Assert-That '首頁有指定網站圖示' ($page.Content -match '<link rel="icon" href="GlbViewer.ico">')
+        Assert-That '網站圖示由本機伺服器提供' (($ico.StatusCode -eq 200) -and ($ico.Headers['Content-Type'] -eq 'image/x-icon') -and [Linq.Enumerable]::SequenceEqual([byte[]]$ico.RawContentStream.ToArray(), [byte[]]$icoSource))
+        Assert-That '網站圖示的路徑前綴錯誤時回 404' ((Get-Status ($wrong + 'GlbViewer.ico')) -eq 404)
         # 唯一允許的外部網址是 Draco 解碼器，只有開啟 Draco 壓縮的模型時才會用到
         $external = @([regex]::Matches($page.Content, 'https?://(?!127\.0\.0\.1)[^"''\s`)]+') | ForEach-Object { $_.Value })
         $unexpected = $external | Where-Object { $_ -ne 'https://www.gstatic.com/draco/versioned/decoders/1.4.1/' }
@@ -162,7 +171,7 @@ try {
     & powershell.exe @common $installer @opts -NoOpenSettings | Out-Null
     Assert-That '安裝成功結束' ($LASTEXITCODE -eq 0)
 
-    $expected = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt', 'uninstall.ps1', 'VERSION'
+    $expected = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt', 'GlbViewer.ico', 'uninstall.ps1', 'VERSION'
     $missing = $expected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $installDir $_)) }
     Assert-That '安裝資料夾含有所有必要檔案' (-not $missing) ($missing -join ', ')
 
@@ -183,7 +192,7 @@ try {
     $remoteDir = Join-Path ([IO.Path]::GetTempPath()) ('glbviewer-remote-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $remoteDir | Out-Null
     Set-Remote $remoteDir '9.9.9'
-    $remoteArgs = @('-VersionUrl', (Get-FileUri (Join-Path $remoteDir 'VERSION')), '-ZipUrl', (Get-FileUri (Join-Path $remoteDir 'source.zip')))
+    $remoteArgs = @('-VersionUrl', (Get-FileUri (Join-Path $remoteDir 'VERSION')), '-ZipUrl', (Get-FileUri (Join-Path $remoteDir 'source.zip')), '-ClassesRoot', $testRoot)
 
     $installed = Start-Viewer (Join-Path $installDir 'GlbViewer.ps1') $remoteArgs
     if ($installed.Url) {
@@ -245,7 +254,8 @@ try {
         Assert-That '更新後所有必要檔案仍在' (-not $gone) ($gone -join ', ')
         $after = Invoke-Api ($installed.Url + 'update/check')
         Assert-That '更新後再檢查會回報已是最新' ($after.Status -eq 200 -and $after.Json.current -eq '9.9.9' -and $after.Json.newer -eq $false)
-        Assert-That '更新不會動到系統登錄項目' ($realCmdBefore -eq $(if (Test-Path $realCmdKey) { (Get-ItemProperty $realCmdKey).'(default)' } else { $null }))
+        Assert-That '更新不會動到系統登錄項目' (($realCmdBefore -eq $(if (Test-Path $realCmdKey) { (Get-ItemProperty $realCmdKey).'(default)' } else { $null })) -and ($realClsidBefore -eq (Test-Path $realClsidKey)))
+        Assert-That '更新會把縮圖元件登錄在指定的位置' (Test-Path "$testRoot\.glb\ShellEx\{E357FCCD-A995-4576-B01F-234630154E96}")
 
         Invoke-WebRequest -Uri ($installed.Url + 'bye') -UseBasicParsing | Out-Null
         Wait-Exit $installed.Proc 8 | Out-Null
@@ -276,6 +286,10 @@ try {
         Remove-Item -LiteralPath $srv.Out -Force -ErrorAction SilentlyContinue
     }
 }
+
+Write-Host '縮圖與圖示'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'test-thumbnail.ps1')
+if ($LASTEXITCODE -ne 0) { $script:failures++ }
 
 if ($script:failures -gt 0) {
     Write-Host "`n共 $($script:failures) 項失敗" -ForegroundColor Red
