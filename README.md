@@ -11,7 +11,7 @@
 在 PowerShell 貼上這一行，會從 GitHub 下載並安裝：
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/wkai2573/glb-viewer/main/install.ps1)))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/wkai2573/glb-viewer/main/install.ps1).TrimStart([char]0xFEFF)))
 ```
 
 也可以先下載專案，再在專案資料夾內執行：
@@ -40,7 +40,7 @@ Windows 不允許程式自行變更預設，所以要手動做一次：
 ## 移除
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/wkai2573/glb-viewer/main/uninstall.ps1)))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/wkai2573/glb-viewer/main/uninstall.ps1).TrimStart([char]0xFEFF)))
 ```
 
 或者執行安裝資料夾裡的 `uninstall.ps1`：
