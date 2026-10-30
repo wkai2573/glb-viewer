@@ -67,7 +67,7 @@
 <div class="bar">
   <div class="name">{{NAME}}</div>
   <span class="hint">左鍵旋轉 · 滾輪縮放 · 右鍵平移</span>
-  <button id="rotate" aria-pressed="true">自動旋轉</button>
+  <button id="rotate" aria-pressed="false">自動旋轉</button>
   <button id="anim" hidden aria-pressed="false">播放動畫</button>
   <button id="lightBtn" aria-pressed="false" aria-controls="panel">光線</button>
   <button id="updateBtn" type="button">更新</button>
@@ -553,7 +553,7 @@
 
   const controls = new THREE.OrbitControls(camera, canvas);
   controls.screenSpacePanning = true;
-  controls.autoRotate = true;
+  controls.autoRotate = false;
   controls.autoRotateSpeed = 5;
   controls.addEventListener('change', () => need());
 

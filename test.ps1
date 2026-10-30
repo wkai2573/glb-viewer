@@ -150,6 +150,9 @@ try {
         Write-Host '載入中字樣的 bug'
         Assert-That '隱藏屬性不會被樣式蓋掉' ($page.Content -match '\[hidden\]\s*\{[^}]*display:\s*none')
 
+        Write-Host '旋轉預設值'
+        Assert-That '預設不自動旋轉' ($page.Content -match '<button id="rotate" aria-pressed="false">自動旋轉</button>' -and $page.Content -match 'controls\.autoRotate = false;')
+
         Write-Host '結束行為'
         Invoke-WebRequest -Uri ($s.Url + 'bye') -UseBasicParsing | Out-Null
         Start-Sleep -Seconds 1
