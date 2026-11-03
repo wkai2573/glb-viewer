@@ -153,9 +153,11 @@ try {
         Write-Host '旋轉預設值'
         Assert-That '預設不自動旋轉' ($page.Content -match '<button id="rotate" aria-pressed="false" data-i18n="rotate">Auto Rotate</button>' -and $page.Content -match 'controls\.autoRotate = false;')
 
-        Write-Host '多語系與語言切換'
-        Assert-That '首頁包含語言切換下拉選單' ($page.Content -match 'id="langBtn"' -and $page.Content -match 'id="langMenu"')
+        Write-Host '設定與多語系'
+        Assert-That '首頁包含設定按鈕與設定對話框' ($page.Content -match 'id="settingsBtn"' -and $page.Content -match 'id="settingsDlg"')
+        Assert-That '設定對話框包含語言切換與更新檢查按鈕' ($page.Content -match 'id="langSeg"' -and $page.Content -match 'id="checkUpdateBtn"')
         Assert-That '首頁包含多語系字典（英文與繁體中文）' ($page.Content -match 'window\.__I18N' -and $page.Content -match "'zh-TW'\s*:")
+        Assert-That '顯示模式與預設使用卡通 (Toon)' ($page.Content -match 'data-mode="toon"' -and $page.Content -match 'mode_toon')
 
         Write-Host '結束行為'
         Invoke-WebRequest -Uri ($s.Url + 'bye') -UseBasicParsing | Out-Null

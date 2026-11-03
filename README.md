@@ -44,18 +44,18 @@ Double-click any `.glb` file.
 - **Scroll wheel**: Zoom in / out
 - **Right click & drag**: Pan
 - **Play Animation**: Appears in the title bar when the model contains animations.
-- **Language Switcher (🌐)**: Toggle between English and 繁體中文 in the title bar dropdown.
+- **Settings (⚙️)**: Open the settings dialog to switch language or check for updates.
 
 ### Lighting Effects
 
 Click **Lighting** in the title bar to expand the right side panel:
 
-- **Presets**: Studio, Noon, Rim, and Toon B (one-click apply).
+- **Presets**: Studio, Noon, Rim, and Toon (one-click apply).
 - **Display Modes**:
   - **Lit**: Retains original PBR materials with studio environment lighting and a directional light.
   - **Flat**: Unlit base color view to inspect textures directly.
-  - **Toon B**: Stylized two-tone cel-shading with outlines.
-- **Lighting Controls**: Adjust azimuth, elevation, brightness, and ambient intensity. Toon B adds shadow threshold and outline thickness. When **Attach light to camera** is enabled, light direction is relative to your viewpoint.
+  - **Toon**: Stylized two-tone cel-shading with outlines.
+- **Lighting Controls**: Adjust azimuth, elevation, brightness, and ambient intensity. Toon adds shadow threshold and outline thickness. When **Attach light to camera** is enabled, light direction is relative to your viewpoint.
 - Hold **Shift** and drag on the canvas to freely rotate the light source.
 
 Settings reset to "Studio" each time a file is opened.
@@ -81,9 +81,9 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -ForceThumbnail
 
 ## Updates
 
-The title bar displays the current version next to the **Update** button. Clicking it checks GitHub for the latest release:
+Click **Settings (⚙️)** in the title bar to open the settings dialog, which displays the current version and a **Check for Updates** button. Clicking it checks GitHub for the latest release:
 
-1. When an update is available, current and latest version numbers are displayed. Click **Update** to begin downloading and installing.
+1. When an update is available, click **Update** to begin downloading and installing.
 2. Close and reopen the window once completed to start using the new version.
 3. Does not check for updates automatically in the background.
 
