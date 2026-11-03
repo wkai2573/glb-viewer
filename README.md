@@ -54,8 +54,8 @@ Click **Lighting** in the title bar to expand the right side panel:
 - **Display Modes**:
   - **Lit**: Retains original PBR materials with studio environment lighting and a directional light.
   - **Flat**: Unlit base color view to inspect textures directly.
-  - **Toon**: Stylized two-tone cel-shading with outlines.
-- **Lighting Controls**: Adjust azimuth, elevation, brightness, and ambient intensity. Toon adds shadow threshold and outline thickness. When **Attach light to camera** is enabled, light direction is relative to your viewpoint.
+  - **Toon**: Stylized three-tone cel-shading (highlight, midtone, shadow) with outlines.
+- **Lighting Controls**: Adjust azimuth, elevation, brightness, and ambient intensity. Toon adds shadow threshold, highlight threshold, and outline thickness. When **Attach light to camera** is enabled, light direction is relative to your viewpoint.
 - Hold **Shift** and drag on the canvas to freely rotate the light source.
 
 Settings reset to "Studio" each time a file is opened.

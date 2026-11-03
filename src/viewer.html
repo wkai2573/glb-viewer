@@ -106,7 +106,8 @@
     <div class="row" id="rowEl"><label for="el" data-i18n="el">Elevation</label><input type="range" id="el" min="-89" max="89" step="1"><span id="elv"></span></div>
     <div class="row" id="rowI"><label for="dirI" data-i18n="dirI">Brightness</label><input type="range" id="dirI" min="0" max="3" step="0.05"><span id="dirIv"></span></div>
     <div class="row" id="rowA"><label for="amb" data-i18n="amb">Ambient</label><input type="range" id="amb" min="0" max="1.5" step="0.05"><span id="ambv"></span></div>
-    <div class="row" id="rowT"><label for="thr" data-i18n="thr">Threshold</label><input type="range" id="thr" min="-0.5" max="0.8" step="0.01"><span id="thrv"></span></div>
+    <div class="row" id="rowT"><label for="thr" data-i18n="thr">Shadow Threshold</label><input type="range" id="thr" min="-0.5" max="0.5" step="0.01"><span id="thrv"></span></div>
+    <div class="row" id="rowH"><label for="hi" data-i18n="hi">Highlight Threshold</label><input type="range" id="hi" min="0.1" max="0.9" step="0.01"><span id="hiv"></span></div>
     <div class="row" id="rowO"><label for="outline" data-i18n="outline">Outline</label><input type="range" id="outline" min="0" max="5" step="0.1"><span id="outlinev"></span></div>
     <p class="note" data-i18n="drag_hint">Hold Shift and drag on canvas to rotate light source.</p>
   </section>
@@ -174,7 +175,8 @@ window.__I18N = (function () {
       el: 'Elevation',
       dirI: 'Brightness',
       amb: 'Ambient',
-      thr: 'Threshold',
+      thr: 'Shadow Threshold',
+      hi: 'Highlight Threshold',
       outline: 'Outline',
       drag_hint: 'Hold Shift and drag on canvas to rotate light source.',
       loading: 'Loading…',
@@ -212,7 +214,7 @@ window.__I18N = (function () {
       preset_toon: 'Toon',
       note_lit: 'Preserves original materials with studio environment and directional light.',
       note_flat: 'Unlit color only, shows base textures directly.',
-      note_toon: 'Toon: Two-tone shading and outlines (may differ from Blender).'
+      note_toon: 'Toon: Three-tone shading (highlight, midtone, shadow) and outlines (may differ from Blender).'
     },
     'zh-TW': {
       hint: '左鍵旋轉 · 滾輪縮放 · 右鍵平移',
@@ -236,7 +238,8 @@ window.__I18N = (function () {
       el: '仰角',
       dirI: '亮度',
       amb: '環境光',
-      thr: '明暗交界',
+      thr: '暗部交界',
+      hi: '亮部交界',
       outline: '描邊粗細',
       drag_hint: '按住 Shift 並在畫面上拖曳，可以直接轉動光源。',
       loading: '載入中…',
@@ -274,7 +277,7 @@ window.__I18N = (function () {
       preset_toon: '卡通',
       note_lit: '保留模型原本的材質，用內建的攝影棚環境光加一盞方向光。',
       note_flat: '沒有光影，只顯示貼圖原本的顏色，檢查上色用。',
-      note_toon: '卡通：兩階明暗加描邊，細節和 Blender 渲染會有差異。'
+      note_toon: '卡通：三階明暗（亮部、中間調、暗部）加描邊，細節和 Blender 渲染會有差異。'
     }
   };
 
@@ -568,17 +571,18 @@ window.__I18N = (function () {
     { id: 'studio', mode: 'lit',  attach: true,  az: -35,  el: 35, dirI: 1.0, amb: 1.0 },
     { id: 'noon',   mode: 'lit',  attach: false, az: 30,   el: 70, dirI: 2.6, amb: 0.3 },
     { id: 'rim',    mode: 'lit',  attach: true,  az: 135,  el: 20, dirI: 2.4, amb: 0.45 },
-    { id: 'toon',   mode: 'toon', attach: true,  az: -32.7, el: 33.5, thr: 0.15, outline: 2.0 },
+    { id: 'toon',   mode: 'toon', attach: true,  az: -32.7, el: 33.5, thr: 0.15, hi: 0.60, outline: 2.0 },
   ];
   const MODE_KEYS = {
     lit: ['attach', 'az', 'el', 'dirI', 'amb'],
     flat: [],
-    toon: ['attach', 'az', 'el', 'thr', 'outline'],
+    toon: ['attach', 'az', 'el', 'thr', 'hi', 'outline'],
   };
-  const state = Object.assign({ thr: 0.15, outline: 2.0, dirI: 1.0, amb: 1.0 }, PRESET_DEFS[0]);
+  const state = Object.assign({ thr: 0.15, hi: 0.60, outline: 2.0, dirI: 1.0, amb: 1.0 }, PRESET_DEFS[0]);
   delete state.id;
 
   const SHADOW_TINT = [0.86, 0.72, 0.70];
+  const MID_TINT = [0.93, 0.86, 0.85];
   const OUTLINE_SRGB = [0.634, 0.462, 0.272];
 
   /* ---------- Renderer & Scene ---------- */
@@ -652,7 +656,7 @@ window.__I18N = (function () {
     }`;
   const toonFS = `
     uniform sampler2D map; uniform bool hasMap; uniform vec3 baseColor; uniform float opacity; uniform float alphaCut;
-    uniform vec3 lightDir; uniform float thr; uniform vec3 tint;
+    uniform vec3 lightDir; uniform float thr; uniform float hi; uniform vec3 tint; uniform vec3 midTint;
     varying vec3 vN; varying vec2 vUv; varying vec3 vC;
     void main() {
       vec3 lin = baseColor * vC;
@@ -668,8 +672,9 @@ window.__I18N = (function () {
         if (!gl_FrontFacing) n = -n;
       #endif
       float ndl = dot(n, lightDir);
-      float t = smoothstep(thr - 0.015, thr + 0.015, ndl);
-      vec3 shaded = lin * mix(tint, vec3(1.0), t);
+      float mid = smoothstep(thr - 0.015, thr + 0.015, ndl);
+      float lit = smoothstep(hi - 0.015, hi + 0.015, ndl);
+      vec3 shaded = lin * mix(mix(tint, midTint, mid), vec3(1.0), lit);
       gl_FragColor = vec4(pow(shaded, vec3(1.0 / 2.2)), 1.0);
     }`;
   const outlineVS = `
@@ -714,7 +719,8 @@ window.__I18N = (function () {
       uniforms: {
         map: { value: map }, hasMap: { value: !!map }, baseColor: { value: new THREE.Vector3(color.r, color.g, color.b) },
         opacity: { value: opacity }, alphaCut: { value: alphaCut },
-        lightDir: { value: new THREE.Vector3(0, 0, 1) }, thr: { value: state.thr }, tint: { value: new THREE.Vector3(...SHADOW_TINT) },
+        lightDir: { value: new THREE.Vector3(0, 0, 1) }, thr: { value: state.thr }, hi: { value: state.hi },
+        tint: { value: new THREE.Vector3(...SHADOW_TINT) }, midTint: { value: new THREE.Vector3(...MID_TINT) },
       },
     }, morph));
     const outlineMat = new THREE.ShaderMaterial(Object.assign({
@@ -859,7 +865,7 @@ window.__I18N = (function () {
     } else if (state.mode === 'toon') {
       const pr = renderer.getPixelRatio();
       renderer.getSize(canvasSize);
-      toonUniforms.forEach((u) => { u.lightDir.value.copy(viewDir); u.thr.value = state.thr; });
+      toonUniforms.forEach((u) => { u.lightDir.value.copy(viewDir); u.thr.value = state.thr; u.hi.value = state.hi; });
       outlineUniforms.forEach((u) => { u.thick.value = state.outline * pr; u.res.value.set(canvasSize.x * pr, canvasSize.y * pr); });
     }
     renderer.render(scene, camera);
@@ -909,12 +915,12 @@ window.__I18N = (function () {
 
   function syncControls() {
     $('attach').checked = state.attach;
-    [['az', state.az, '°'], ['el', state.el, '°'], ['dirI', state.dirI, ''], ['amb', state.amb, ''], ['thr', state.thr, ''], ['outline', state.outline, '']].forEach(([id, v, unit]) => {
+    [['az', state.az, '°'], ['el', state.el, '°'], ['dirI', state.dirI, ''], ['amb', state.amb, ''], ['thr', state.thr, ''], ['hi', state.hi, ''], ['outline', state.outline, '']].forEach(([id, v, unit]) => {
       $(id).value = v;
       $(id + 'v').textContent = (Number.isInteger(+v) ? Math.round(v) : (+v).toFixed(2)) + unit;
     });
     const used = MODE_KEYS[state.mode];
-    [['rowAz', 'az'], ['rowEl', 'el'], ['rowI', 'dirI'], ['rowA', 'amb'], ['rowT', 'thr'], ['rowO', 'outline']].forEach(([row, key]) => {
+    [['rowAz', 'az'], ['rowEl', 'el'], ['rowI', 'dirI'], ['rowA', 'amb'], ['rowT', 'thr'], ['rowH', 'hi'], ['rowO', 'outline']].forEach(([row, key]) => {
       const on = used.includes(key);
       $(row).classList.toggle('dim', !on);
       $(row).querySelector('input').disabled = !on;
@@ -945,7 +951,7 @@ window.__I18N = (function () {
     $('modenote').textContent = t('note_' + state.mode);
   });
 
-  ['az', 'el', 'dirI', 'amb', 'thr', 'outline'].forEach((id) => {
+  ['az', 'el', 'dirI', 'amb', 'thr', 'hi', 'outline'].forEach((id) => {
     $(id).addEventListener('input', () => {
       state[id] = parseFloat($(id).value);
       if (id === 'outline') applyMode(); else { syncControls(); need(); }

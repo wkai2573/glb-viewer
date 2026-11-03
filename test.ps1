@@ -158,6 +158,7 @@ try {
         Assert-That '設定對話框包含語言切換與更新檢查按鈕' ($page.Content -match 'id="langSeg"' -and $page.Content -match 'id="checkUpdateBtn"')
         Assert-That '首頁包含多語系字典（英文與繁體中文）' ($page.Content -match 'window\.__I18N' -and $page.Content -match "'zh-TW'\s*:")
         Assert-That '顯示模式與預設使用卡通 (Toon)' ($page.Content -match 'data-mode="toon"' -and $page.Content -match 'mode_toon')
+        Assert-That '卡通模式支援三階明暗控制項' ($page.Content -match 'id="rowH"' -and $page.Content -match 'id="hi"' -and $page.Content -match 'midTint')
 
         Write-Host '結束行為'
         Invoke-WebRequest -Uri ($s.Url + 'bye') -UseBasicParsing | Out-Null
