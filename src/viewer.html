@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -43,11 +43,25 @@
   .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); padding: 6px 4px; font-size: 13px; }
   .seg button:last-child { border-right: 0; }
   .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
-  .row { display: grid; grid-template-columns: 64px 1fr 44px; align-items: center; gap: 8px; margin: 4px 0; }
+  .row { display: grid; grid-template-columns: 88px 1fr 44px; align-items: center; gap: 8px; margin: 4px 0; }
   .row span:last-child { text-align: right; font-family: Consolas, monospace; font-size: 12px; color: var(--muted); }
   .row.dim { opacity: 0.4; }
   .check { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   input[type="range"] { width: 100%; min-width: 0; accent-color: var(--accent); }
+
+  .lang-dropdown { position: relative; display: inline-block; }
+  .dropdown-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; min-width: 100px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); padding: 4px; display: flex; flex-direction: column; gap: 2px;
+    z-index: 10; backdrop-filter: blur(10px);
+  }
+  .dropdown-menu button {
+    width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 6px 10px;
+    background: transparent; color: var(--fg); font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .dropdown-menu button:hover { background: rgba(255, 255, 255, 0.08); }
+  .dropdown-menu button.active { color: var(--accent); font-weight: 700; }
 
   .ver { color: var(--muted); font-size: 12px; white-space: nowrap; }
   @media (max-width: 760px) { .hint { display: none; } }
@@ -66,40 +80,47 @@
 <div id="stage"></div>
 <div class="bar">
   <div class="name">{{NAME}}</div>
-  <span class="hint">左鍵旋轉 · 滾輪縮放 · 右鍵平移</span>
-  <button id="rotate" aria-pressed="false">自動旋轉</button>
-  <button id="anim" hidden aria-pressed="false">播放動畫</button>
-  <button id="lightBtn" aria-pressed="false" aria-controls="panel">光線</button>
-  <button id="updateBtn" type="button">更新</button>
+  <span class="hint" data-i18n="hint">Left-drag to rotate · Scroll to zoom · Right-drag to pan</span>
+  <button id="rotate" aria-pressed="false" data-i18n="rotate">Auto Rotate</button>
+  <button id="anim" hidden aria-pressed="false" data-i18n="anim">Play Animation</button>
+  <button id="lightBtn" aria-pressed="false" aria-controls="panel" data-i18n="light">Lighting</button>
+  <button id="updateBtn" type="button" data-i18n="update">Update</button>
+  <div class="lang-dropdown">
+    <button id="langBtn" type="button" aria-haspopup="true" aria-expanded="false">🌐 EN</button>
+    <div id="langMenu" class="dropdown-menu" hidden>
+      <button type="button" data-lang="en">English</button>
+      <button type="button" data-lang="zh-TW">繁體中文</button>
+    </div>
+  </div>
   <span class="ver" id="ver">v{{VERSION}}</span>
 </div>
 <aside id="panel" hidden>
   <section>
-    <h2>光線預設</h2>
+    <h2 data-i18n="presets_title">LIGHTING PRESETS</h2>
     <div class="grid2" id="presets"></div>
   </section>
   <section>
-    <h2>顯示方式</h2>
+    <h2 data-i18n="modes_title">DISPLAY MODE</h2>
     <div class="seg" id="modes">
-      <button type="button" data-mode="lit" aria-pressed="false">上色</button>
-      <button type="button" data-mode="flat" aria-pressed="false">純顏色</button>
-      <button type="button" data-mode="toon" aria-pressed="false">風格 B</button>
+      <button type="button" data-mode="lit" aria-pressed="false" data-i18n="mode_lit">Lit</button>
+      <button type="button" data-mode="flat" aria-pressed="false" data-i18n="mode_flat">Flat</button>
+      <button type="button" data-mode="toon" aria-pressed="false" data-i18n="mode_toon">Toon B</button>
     </div>
     <p class="note" id="modenote"></p>
   </section>
   <section>
-    <h2>打光</h2>
-    <label class="check"><input type="checkbox" id="attach"> 光線跟著鏡頭</label>
-    <div class="row" id="rowAz"><label for="az">水平角度</label><input type="range" id="az" min="-180" max="180" step="1"><span id="azv"></span></div>
-    <div class="row" id="rowEl"><label for="el">仰角</label><input type="range" id="el" min="-89" max="89" step="1"><span id="elv"></span></div>
-    <div class="row" id="rowI"><label for="dirI">亮度</label><input type="range" id="dirI" min="0" max="3" step="0.05"><span id="dirIv"></span></div>
-    <div class="row" id="rowA"><label for="amb">環境光</label><input type="range" id="amb" min="0" max="1.5" step="0.05"><span id="ambv"></span></div>
-    <div class="row" id="rowT"><label for="thr">明暗交界</label><input type="range" id="thr" min="-0.5" max="0.8" step="0.01"><span id="thrv"></span></div>
-    <div class="row" id="rowO"><label for="outline">描邊粗細</label><input type="range" id="outline" min="0" max="5" step="0.1"><span id="outlinev"></span></div>
-    <p class="note">按住 Shift 並在畫面上拖曳，可以直接轉動光源。</p>
+    <h2 data-i18n="lighting_title">LIGHTING</h2>
+    <label class="check"><input type="checkbox" id="attach"> <span data-i18n="attach">Attach light to camera</span></label>
+    <div class="row" id="rowAz"><label for="az" data-i18n="az">Azimuth</label><input type="range" id="az" min="-180" max="180" step="1"><span id="azv"></span></div>
+    <div class="row" id="rowEl"><label for="el" data-i18n="el">Elevation</label><input type="range" id="el" min="-89" max="89" step="1"><span id="elv"></span></div>
+    <div class="row" id="rowI"><label for="dirI" data-i18n="dirI">Brightness</label><input type="range" id="dirI" min="0" max="3" step="0.05"><span id="dirIv"></span></div>
+    <div class="row" id="rowA"><label for="amb" data-i18n="amb">Ambient</label><input type="range" id="amb" min="0" max="1.5" step="0.05"><span id="ambv"></span></div>
+    <div class="row" id="rowT"><label for="thr" data-i18n="thr">Threshold</label><input type="range" id="thr" min="-0.5" max="0.8" step="0.01"><span id="thrv"></span></div>
+    <div class="row" id="rowO"><label for="outline" data-i18n="outline">Outline</label><input type="range" id="outline" min="0" max="5" step="0.1"><span id="outlinev"></span></div>
+    <p class="note" data-i18n="drag_hint">Hold Shift and drag on canvas to rotate light source.</p>
   </section>
 </aside>
-<div id="msg">載入中…</div>
+<div id="msg" data-i18n="loading">Loading…</div>
 <div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle" hidden>
   <div class="card" tabindex="-1">
     <h2 id="dlgTitle"></h2>
@@ -108,6 +129,189 @@
   </div>
 </div>
 
+<script>
+window.__I18N = (function () {
+  'use strict';
+  const DICT = {
+    en: {
+      hint: 'Left-drag to rotate · Scroll to zoom · Right-drag to pan',
+      rotate: 'Auto Rotate',
+      anim: 'Play Animation',
+      light: 'Lighting',
+      update: 'Update',
+      updated_reopen: 'Updated, Please Reopen',
+      presets_title: 'LIGHTING PRESETS',
+      modes_title: 'DISPLAY MODE',
+      mode_lit: 'Lit',
+      mode_flat: 'Flat',
+      mode_toon: 'Toon B',
+      lighting_title: 'LIGHTING',
+      attach: 'Attach light to camera',
+      az: 'Azimuth',
+      el: 'Elevation',
+      dirI: 'Brightness',
+      amb: 'Ambient',
+      thr: 'Threshold',
+      outline: 'Outline',
+      drag_hint: 'Hold Shift and drag on canvas to rotate light source.',
+      loading: 'Loading…',
+      close: 'Close',
+      btn_cancel: 'Cancel',
+      btn_update: 'Update',
+      dlg_updating_title: 'Updating',
+      dlg_updating_body: 'Downloading and installing new version. Please wait and do not close this window.',
+      dlg_done_title: 'Update Complete',
+      dlg_done_body: 'Updated to v{version}. Please restart this window to use the new version.',
+      dlg_already_updated: 'Already updated. Please restart this window to use the new version.',
+      dlg_fail_title: 'Update Failed',
+      dlg_fail_body: '{error} You can try again later or re-run the install script.',
+      dlg_dev_title: 'Cannot Update',
+      dlg_dev_body: 'Running in development mode from source directory. Updates are disabled. Please install via install script.',
+      dlg_check_title: 'Checking for Updates',
+      dlg_check_body: 'Connecting to GitHub to check for the latest version.',
+      dlg_check_fail: 'Check Failed',
+      dlg_uptodate_title: 'Up to Date',
+      dlg_uptodate_body: 'v{current} is currently the latest version.',
+      dlg_new_title: 'Update Available',
+      dlg_new_body: 'Current version is v{current}, latest is v{latest}. Update now?',
+      err_unknown: 'An unknown error occurred.',
+      err_no_response: 'Unable to get response from server.',
+      err_component: 'Failed to load viewer components. Please reinstall glb-viewer.',
+      err_webgl: 'WebGL is not supported in this browser. Unable to display 3D models.',
+      err_nomesh: 'No meshes found in this file.',
+      err_ktx2: 'This model uses KTX2 texture compression, which is currently not supported.',
+      err_meshopt: 'This model uses Meshopt compression, which is currently not supported.',
+      err_draco: 'This model uses Draco compression, requiring an online decoder download which failed.',
+      err_generic: 'Failed to load model. The file may be corrupted, uses an unsupported format, or requires an online Draco decoder.',
+      preset_studio: 'Studio',
+      preset_noon: 'Noon',
+      preset_rim: 'Rim',
+      preset_toon: 'Toon B',
+      note_lit: 'Preserves original materials with studio environment and directional light.',
+      note_flat: 'Unlit color only, shows base textures directly.',
+      note_toon: 'Approximation: two-tone shading and outlines (may differ from Blender).'
+    },
+    'zh-TW': {
+      hint: '左鍵旋轉 · 滾輪縮放 · 右鍵平移',
+      rotate: '自動旋轉',
+      anim: '播放動畫',
+      light: '光線',
+      update: '更新',
+      updated_reopen: '已更新，請重開',
+      presets_title: '光線預設',
+      modes_title: '顯示方式',
+      mode_lit: '上色',
+      mode_flat: '純顏色',
+      mode_toon: '風格 B',
+      lighting_title: '打光',
+      attach: '光線跟著鏡頭',
+      az: '水平角度',
+      el: '仰角',
+      dirI: '亮度',
+      amb: '環境光',
+      thr: '明暗交界',
+      outline: '描邊粗細',
+      drag_hint: '按住 Shift 並在畫面上拖曳，可以直接轉動光源。',
+      loading: '載入中…',
+      close: '關閉',
+      btn_cancel: '取消',
+      btn_update: '更新',
+      dlg_updating_title: '更新中',
+      dlg_updating_body: '正在下載並安裝新版本，請稍候，不要關閉視窗。',
+      dlg_done_title: '更新完成',
+      dlg_done_body: '已更新到 v{version}。請關閉這個視窗後重新開啟，才會使用新版本。',
+      dlg_already_updated: '已經更新過了。請關閉這個視窗後重新開啟，才會使用新版本。',
+      dlg_fail_title: '更新失敗',
+      dlg_fail_body: '{error} 可以稍後再試，或重新執行安裝指令。',
+      dlg_dev_title: '無法更新',
+      dlg_dev_body: '目前是從原始碼資料夾執行的開發模式，不支援更新。請用安裝腳本安裝後再使用。',
+      dlg_check_title: '檢查更新',
+      dlg_check_body: '正在連到 GitHub 檢查最新版本。',
+      dlg_check_fail: '檢查失敗',
+      dlg_uptodate_title: '已是最新版本',
+      dlg_uptodate_body: '目前的 v{current} 已經是最新版本。',
+      dlg_new_title: '有新版本',
+      dlg_new_body: '目前是 v{current}，最新是 v{latest}。要現在更新嗎？',
+      err_unknown: '發生未知的錯誤。',
+      err_no_response: '無法取得回應。',
+      err_component: '無法載入檢視元件，請重新安裝 glb-viewer。',
+      err_webgl: '這個瀏覽器無法使用 WebGL，沒辦法顯示 3D 模型。',
+      err_nomesh: '這個檔案裡沒有網格。',
+      err_ktx2: '這個模型使用 KTX2 貼圖壓縮，目前不支援。',
+      err_meshopt: '這個模型使用 Meshopt 壓縮，目前不支援。',
+      err_draco: '這個模型使用 Draco 壓縮，需要連網下載解碼器，但目前下載失敗。',
+      err_generic: '無法載入模型。檔案可能已損毀、使用了不支援的格式，或是 Draco 壓縮的模型但無法連網下載解碼器。',
+      preset_studio: '柔和攝影棚',
+      preset_noon: '正午強光',
+      preset_rim: '側逆光輪廓',
+      preset_toon: '風格 B',
+      note_lit: '保留模型原本的材質，用內建的攝影棚環境光加一盞方向光。',
+      note_flat: '沒有光影，只顯示貼圖原本的顏色，檢查上色用。',
+      note_toon: '近似版：兩階明暗加描邊，細節和 Blender 渲染會有差異。'
+    }
+  };
+
+  let currentLang = 'en';
+  try {
+    const saved = localStorage.getItem('glb-viewer-lang');
+    if (saved && DICT[saved]) {
+      currentLang = saved;
+    } else {
+      const nav = (navigator.language || navigator.userLanguage || '').toLowerCase();
+      if (nav.startsWith('zh')) currentLang = 'zh-TW';
+    }
+  } catch (e) {}
+
+  const listeners = [];
+
+  function t(key, vars) {
+    let str = (DICT[currentLang] && DICT[currentLang][key]) || (DICT.en && DICT.en[key]) || key;
+    if (vars) {
+      Object.keys(vars).forEach((k) => {
+        str = str.replace(new RegExp('\\{' + k + '\\}', 'g'), vars[k]);
+      });
+    }
+    return str;
+  }
+
+  function applyDom() {
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      const key = el.dataset.i18n;
+      if (key) el.textContent = t(key);
+    });
+    const langBtn = document.getElementById('langBtn');
+    if (langBtn) {
+      langBtn.textContent = (currentLang === 'zh-TW' ? '🌐 繁中' : '🌐 EN');
+    }
+    document.querySelectorAll('#langMenu button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.lang === currentLang);
+    });
+  }
+
+  function setLanguage(lang) {
+    if (!DICT[lang]) return;
+    currentLang = lang;
+    try { localStorage.setItem('glb-viewer-lang', lang); } catch (e) {}
+    document.documentElement.lang = (lang === 'zh-TW' ? 'zh-Hant' : 'en');
+    applyDom();
+    listeners.forEach((fn) => { try { fn(lang); } catch (err) {} });
+  }
+
+  function onLanguageChange(fn) {
+    listeners.push(fn);
+  }
+
+  return {
+    get current() { return currentLang; },
+    DICT,
+    t,
+    setLanguage,
+    applyDom,
+    onLanguageChange
+  };
+})();
+</script>
+
 <!-- 更新按鈕放在獨立的區塊，即使下面的檢視元件載入失敗，使用者仍然能靠更新修復 -->
 <script>
 (function () {
@@ -115,15 +319,52 @@
   const CAN_UPDATE = {{CANUPDATE}};
   const $ = (id) => document.getElementById(id);
   const btn = $('updateBtn');
+  const t = window.__I18N.t;
   let updated = false;
   let busy = false;
+
+  const langBtn = $('langBtn');
+  const langMenu = $('langMenu');
+  if (langBtn && langMenu) {
+    langBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = langMenu.hidden;
+      langMenu.hidden = !open;
+      langBtn.setAttribute('aria-expanded', String(open));
+    });
+    langMenu.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b && b.dataset.lang) {
+        window.__I18N.setLanguage(b.dataset.lang);
+        langMenu.hidden = true;
+        langBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!langMenu.hidden && !e.target.closest('.lang-dropdown')) {
+        langMenu.hidden = true;
+        langBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !langMenu.hidden) {
+        langMenu.hidden = true;
+        langBtn.setAttribute('aria-expanded', 'false');
+        langBtn.focus();
+      }
+    });
+  }
+
+  window.__I18N.applyDom();
+  window.__I18N.onLanguageChange(() => {
+    if (updated) btn.textContent = t('updated_reopen');
+  });
 
   function closeDialog() {
     $('dlg').hidden = true;
     btn.focus();
   }
 
-  // buttons 是 [{ text, primary, run }]；空陣列代表處理中，不能手動關閉
   function showDialog(title, body, buttons) {
     busy = buttons.length === 0;
     $('dlgTitle').textContent = title;
@@ -146,7 +387,6 @@
     if ($('dlg').hidden) return;
     if (e.key === 'Escape' && !busy) closeDialog();
     if (e.key === 'Tab') {
-      // 對話框開著時，焦點只在對話框裡打轉，不會跑到背後的按鈕
       e.preventDefault();
       const items = [...$('dlgActions').querySelectorAll('button')];
       if (!items.length) { $('dlg').firstElementChild.focus(); return; }
@@ -160,34 +400,34 @@
       const res = await fetch(path, { method: method || 'GET', cache: 'no-store' });
       return await res.json();
     } catch (e) {
-      return { ok: false, error: '無法取得回應。' };
+      return { ok: false, error: t('err_no_response') };
     }
   }
 
-  const CLOSE = [{ text: '關閉' }];
+  const getCloseBtn = () => [{ text: t('close') }];
 
   async function apply() {
-    showDialog('更新中', '正在下載並安裝新版本，請稍候，不要關閉視窗。', []);
+    showDialog(t('dlg_updating_title'), t('dlg_updating_body'), []);
     const r = await callApi('update/apply', 'POST');
     if (r.ok) {
       updated = true;
-      btn.textContent = '已更新，請重開';
-      showDialog('更新完成', '已更新到 v' + r.version + '。請關閉這個視窗後重新開啟，才會使用新版本。', CLOSE);
+      btn.textContent = t('updated_reopen');
+      showDialog(t('dlg_done_title'), t('dlg_done_body', { version: r.version }), getCloseBtn());
     } else {
-      showDialog('更新失敗', (r.error || '發生未知的錯誤。') + ' 可以稍後再試，或重新執行安裝指令。', CLOSE);
+      showDialog(t('dlg_fail_title'), t('dlg_fail_body', { error: r.error || t('err_unknown') }), getCloseBtn());
     }
   }
 
   btn.addEventListener('click', async () => {
     if (!$('dlg').hidden) return;
-    if (updated) { showDialog('更新完成', '已經更新過了。請關閉這個視窗後重新開啟，才會使用新版本。', CLOSE); return; }
-    if (!CAN_UPDATE) { showDialog('無法更新', '目前是從原始碼資料夾執行的開發模式，不支援更新。請用安裝腳本安裝後再使用。', CLOSE); return; }
-    showDialog('檢查更新', '正在連到 GitHub 檢查最新版本。', []);
+    if (updated) { showDialog(t('dlg_done_title'), t('dlg_already_updated'), getCloseBtn()); return; }
+    if (!CAN_UPDATE) { showDialog(t('dlg_dev_title'), t('dlg_dev_body'), getCloseBtn()); return; }
+    showDialog(t('dlg_check_title'), t('dlg_check_body'), []);
     const r = await callApi('update/check');
-    if (!r.ok) showDialog('檢查失敗', r.error || '發生未知的錯誤。', CLOSE);
-    else if (!r.newer) showDialog('已是最新版本', '目前的 v' + r.current + ' 已經是最新版本。', CLOSE);
-    else showDialog('有新版本', '目前是 v' + r.current + '，最新是 v' + r.latest + '。要現在更新嗎？',
-      [{ text: '更新', primary: true, run: apply }, { text: '取消' }]);
+    if (!r.ok) showDialog(t('dlg_check_fail'), r.error || t('err_unknown'), getCloseBtn());
+    else if (!r.newer) showDialog(t('dlg_uptodate_title'), t('dlg_uptodate_body', { current: r.current }), getCloseBtn());
+    else showDialog(t('dlg_new_title'), t('dlg_new_body', { current: r.current, latest: r.latest }),
+      [{ text: t('btn_update'), primary: true, run: apply }, { text: t('btn_cancel') }]);
   });
 })();
 </script>
@@ -202,44 +442,51 @@
   const $ = (id) => document.getElementById(id);
   const msg = $('msg');
   const stage = $('stage');
+  const t = window.__I18N.t;
+  let currentErrorKey = null;
 
-  function showError(text) {
+  function showError(key, directText) {
     msg.hidden = false;
     msg.className = 'err';
-    msg.textContent = text;
+    currentErrorKey = key || null;
+    msg.textContent = key ? t(key) : directText;
   }
 
+  window.__I18N.onLanguageChange(() => {
+    if (currentErrorKey) {
+      msg.textContent = t(currentErrorKey);
+    }
+  });
+
   if (!window.THREE || !THREE.GLTFLoader || !THREE.OrbitControls || !THREE.DRACOLoader) {
-    showError('無法載入檢視元件，請重新安裝 glb-viewer。');
+    showError('err_component');
     return;
   }
 
-  /* ---------- 光線預設 ---------- */
-  // 角度是相對於畫面的方向：水平 0 度在鏡頭正前方，正值偏右；仰角正值偏上
-  const PRESETS = [
-    { id: 'studio',  name: '柔和攝影棚', mode: 'lit',  attach: true,  az: -35,  el: 35, dirI: 1.0, amb: 1.0 },
-    { id: 'noon',    name: '正午強光',   mode: 'lit',  attach: false, az: 30,   el: 70, dirI: 2.6, amb: 0.3 },
-    { id: 'rim',     name: '側逆光輪廓', mode: 'lit',  attach: true,  az: 135,  el: 20, dirI: 2.4, amb: 0.45 },
-    { id: 'toon',    name: '風格 B',     mode: 'toon', attach: true,  az: -32.7, el: 33.5, thr: 0.15, outline: 2.0 },
+  /* ---------- Lighting Presets ---------- */
+  const PRESET_DEFS = [
+    { id: 'studio', mode: 'lit',  attach: true,  az: -35,  el: 35, dirI: 1.0, amb: 1.0 },
+    { id: 'noon',   mode: 'lit',  attach: false, az: 30,   el: 70, dirI: 2.6, amb: 0.3 },
+    { id: 'rim',    mode: 'lit',  attach: true,  az: 135,  el: 20, dirI: 2.4, amb: 0.45 },
+    { id: 'toon',   mode: 'toon', attach: true,  az: -32.7, el: 33.5, thr: 0.15, outline: 2.0 },
   ];
-  // 每種顯示方式實際用到的參數，用來判斷目前是不是某組預設
   const MODE_KEYS = {
     lit: ['attach', 'az', 'el', 'dirI', 'amb'],
     flat: [],
     toon: ['attach', 'az', 'el', 'thr', 'outline'],
   };
-  const state = Object.assign({ thr: 0.15, outline: 2.0, dirI: 1.0, amb: 1.0 }, PRESETS[0]);
-  delete state.id; delete state.name;
+  const state = Object.assign({ thr: 0.15, outline: 2.0, dirI: 1.0, amb: 1.0 }, PRESET_DEFS[0]);
+  delete state.id;
 
   const SHADOW_TINT = [0.86, 0.72, 0.70];
   const OUTLINE_SRGB = [0.634, 0.462, 0.272];
 
-  /* ---------- 渲染器與場景 ---------- */
+  /* ---------- Renderer & Scene ---------- */
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
   } catch (e) {
-    showError('這個瀏覽器無法使用 WebGL，沒辦法顯示 3D 模型。');
+    showError('err_webgl');
     return;
   }
   renderer.outputEncoding = THREE.sRGBEncoding;
@@ -254,7 +501,6 @@
   const sun = new THREE.DirectionalLight(0xffffff, state.dirI);
   scene.add(sun, sun.target);
 
-  // 寫實模式用的環境光：一個灰色房間加幾塊發亮的面板，沒有外部圖片
   function buildEnvironment() {
     const env = new THREE.Scene();
     const room = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
@@ -280,7 +526,7 @@
   }
   scene.environment = buildEnvironment();
 
-  /* ---------- 風格 B 的材質 ---------- */
+  /* ---------- Toon Materials ---------- */
   const toonVS = `
     #include <common>
     #include <skinning_pars_vertex>
@@ -348,7 +594,7 @@
     }`;
   const outlineFS = `uniform vec3 col; void main() { gl_FragColor = vec4(col, 1.0); }`;
 
-  const toonUniforms = [];   // 所有風格 B 材質共用的數值，每次重畫前更新
+  const toonUniforms = [];
   const outlineUniforms = [];
 
   function makeVariants(mesh) {
@@ -385,7 +631,7 @@
     return { lit: src, flat: flatMat, toon: toonMat, outlineMat };
   }
 
-  /* ---------- 模型 ---------- */
+  /* ---------- Model ---------- */
   let root = null;
   let meshes = [];
   let mixer = null;
@@ -396,7 +642,7 @@
   function setModel(gltf) {
     const model = gltf.scene;
     model.traverse((o) => { if (o.isMesh) meshes.push(o); });
-    if (!meshes.length) { meshes = []; showError('這個檔案裡沒有網格。'); return; }
+    if (!meshes.length) { meshes = []; showError('err_nomesh'); return; }
     root = new THREE.Group();
     root.add(model);
     scene.add(root);
@@ -435,6 +681,7 @@
       $('anim').hidden = false;
     }
 
+    currentErrorKey = null;
     msg.hidden = true;
     applyMode();
     resetView();
@@ -450,7 +697,6 @@
   function applyMode() {
     meshes.forEach((m) => {
       m.material = m.userData.variants[state.mode];
-      // 鏤空與半透明的材質，描邊會畫成整塊實心的外殼，所以不描邊
       const src = m.userData.variants.lit;
       const cutout = src.transparent || src.alphaTest > 0;
       m.userData.outline.visible = state.mode === 'toon' && state.outline > 0 && !cutout;
@@ -459,7 +705,7 @@
     syncControls();
   }
 
-  /* ---------- 視角 ---------- */
+  /* ---------- Camera View ---------- */
   function resetView() {
     const dir = new THREE.Vector3(0, 0.18, 1).normalize();
     const fov = THREE.MathUtils.degToRad(camera.fov);
@@ -474,7 +720,7 @@
     need();
   }
 
-  /* ---------- 光線 ---------- */
+  /* ---------- Lighting ---------- */
   function angleToDir(az, el, out = new THREE.Vector3()) {
     const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el);
     return out.set(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a));
@@ -483,7 +729,6 @@
     return { el: THREE.MathUtils.radToDeg(Math.asin(Math.max(-1, Math.min(1, d.y)))), az: THREE.MathUtils.radToDeg(Math.atan2(d.x, d.z)) };
   }
 
-  // 為了不在沒操作時一直吃顯卡，只在有變動時才重畫
   let dirty = true;
   function need() { dirty = true; }
 
@@ -530,8 +775,7 @@
   }
   new ResizeObserver(resize).observe(stage);
 
-  /* ---------- 互動 ---------- */
-  // 按住 Shift 拖曳要轉動光源，所以先掛自己的監聽，再建立控制器，才能攔住控制器的拖曳
+  /* ---------- Interaction ---------- */
   let lightDrag = null;
   canvas.addEventListener('pointerdown', (e) => {
     if (!e.shiftKey || e.button !== 0) return;
@@ -557,16 +801,9 @@
   controls.autoRotateSpeed = 5;
   controls.addEventListener('change', () => need());
 
-  /* ---------- 控制項 ---------- */
-  const NOTES = {
-    lit: '保留模型原本的材質，用內建的攝影棚環境光加一盞方向光。',
-    flat: '沒有光影，只顯示貼圖原本的顏色，檢查上色用。',
-    toon: '近似版：兩階明暗加描邊，細節和 Blender 渲染會有差異。',
-  };
-
+  /* ---------- Controls & Presets ---------- */
   function presetMatches(p) {
     if (p.mode !== state.mode) return false;
-    // 角度的滑桿一格是 1 度，其餘最細一格是 0.01
     return MODE_KEYS[p.mode].every((k) => (typeof p[k] === 'number' ? Math.abs(p[k] - state[k]) < (k === 'az' || k === 'el' ? 0.5 : 0.005) : p[k] === state[k]));
   }
 
@@ -585,20 +822,27 @@
     $('attach').disabled = !used.includes('attach');
     document.querySelectorAll('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)));
     document.querySelectorAll('#presets button').forEach((b) => {
-      b.setAttribute('aria-pressed', String(presetMatches(PRESETS.find((p) => p.id === b.dataset.preset))));
+      b.setAttribute('aria-pressed', String(presetMatches(PRESET_DEFS.find((p) => p.id === b.dataset.preset))));
     });
-    $('modenote').textContent = NOTES[state.mode];
+    $('modenote').textContent = t('note_' + state.mode);
   }
 
-  PRESETS.forEach((p) => {
+  PRESET_DEFS.forEach((p) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.dataset.preset = p.id; b.textContent = p.name; b.setAttribute('aria-pressed', 'false');
+    b.type = 'button'; b.dataset.preset = p.id; b.textContent = t('preset_' + p.id); b.setAttribute('aria-pressed', 'false');
     b.addEventListener('click', () => {
-      const { id, name, ...values } = p;
+      const { id, ...values } = p;
       Object.assign(state, values);
       applyMode();
     });
     $('presets').append(b);
+  });
+
+  window.__I18N.onLanguageChange(() => {
+    document.querySelectorAll('#presets button').forEach((b) => {
+      b.textContent = t('preset_' + b.dataset.preset);
+    });
+    $('modenote').textContent = t('note_' + state.mode);
   });
 
   ['az', 'el', 'dirI', 'amb', 'thr', 'outline'].forEach((id) => {
@@ -608,7 +852,6 @@
     });
   });
   $('attach').addEventListener('change', () => {
-    // 切換時保持目前看到的光線方向，不讓畫面突然跳動
     camera.updateMatrixWorld();
     const dir = angleToDir(state.az, state.el);
     const out = $('attach').checked ? dir.transformDirection(camera.matrixWorldInverse) : dir.applyQuaternion(camera.quaternion);
@@ -630,13 +873,13 @@
   });
   $('anim').addEventListener('click', () => setPlaying($('anim').getAttribute('aria-pressed') !== 'true'));
 
-  /* ---------- 載入 ---------- */
+  /* ---------- Load Model ---------- */
   function explainError(err) {
     const text = String((err && err.message) || err || '');
-    if (/KTX2/i.test(text)) return '這個模型使用 KTX2 貼圖壓縮，目前不支援。';
-    if (/meshopt/i.test(text)) return '這個模型使用 Meshopt 壓縮，目前不支援。';
-    if (/draco/i.test(text)) return '這個模型使用 Draco 壓縮，需要連網下載解碼器，但目前下載失敗。';
-    return '無法載入模型。檔案可能已損毀、使用了不支援的格式，或是 Draco 壓縮的模型但無法連網下載解碼器。';
+    if (/KTX2/i.test(text)) return 'err_ktx2';
+    if (/meshopt/i.test(text)) return 'err_meshopt';
+    if (/draco/i.test(text)) return 'err_draco';
+    return 'err_generic';
   }
 
   const draco = new THREE.DRACOLoader();
@@ -650,7 +893,6 @@
   loop();
   window.__viewer = { state, get meshes() { return meshes; }, need, setPlaying, camera, scene };
 
-  // 視窗關閉時通知伺服器結束；重新整理則會取消結束。
   window.addEventListener('pagehide', () => navigator.sendBeacon('bye'));
   setInterval(() => fetch('ping').catch(() => {}), 5000);
 })();

@@ -1,147 +1,154 @@
-<img src="assets/icon.svg" alt="glb-viewer 圖示" width="96" align="right">
+<img src="assets/icon.svg" alt="glb-viewer icon" width="96" align="right">
 
 # glb-viewer
 
-在 Windows 上雙擊 `.glb` 就能直接預覽 3D 模型，像開相片一樣。檔案總管裡的 `.glb` 也會直接顯示縮圖。
+**English** | [繁體中文](README.zh-TW.md)
 
-- 獨立的小視窗，關掉就結束，不會留下背景程式。
-- 完全離線可用，模型只在本機處理，不會上傳。只有你按下標題列的「更新」時，才會連到 GitHub 檢查版本。
-- 只安裝在目前使用者的範圍，不需要系統管理員權限。
+Preview 3D models directly on Windows by double-clicking `.glb` files, just like opening images. Windows File Explorer also displays thumbnails for `.glb` files directly.
 
-## 安裝
+- Lightweight standalone window: terminates completely when closed, leaving no background processes.
+- Fully offline: models are processed locally and never uploaded. Connects to GitHub only when you click "Update" on the title bar to check for new versions.
+- Per-user installation: installs under the current user profile without requiring administrator privileges.
 
-在 PowerShell 貼上這一行，會從 GitHub 下載並安裝：
+## Installation
+
+Paste this line into PowerShell to download and install from GitHub:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/wkai2573/glb-viewer/main/install.ps1).TrimStart([char]0xFEFF)))
 ```
 
-也可以先下載專案，再在專案資料夾內執行：
+Alternatively, clone/download the repository and run inside the project folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-安裝位置是 `%LOCALAPPDATA%\GlbViewer`。重複執行會直接覆蓋更新。
+The installation path is `%LOCALAPPDATA%\GlbViewer`. Running the installer again cleanly overwrites and updates the installation.
 
-安裝時會用系統內建的編譯器編譯縮圖元件，並登錄為 `.glb` 的縮圖提供者，詳見下面的「縮圖」。
+During installation, the thumbnail component is compiled using the system's built-in C# compiler and registered as the thumbnail provider for `.glb` files. See "Thumbnails and Icons" below for details.
 
-### 設成預設程式
+### Set as Default Application
 
-Windows 不允許程式自行變更預設，所以要手動做一次：
+Windows does not permit applications to change file associations programmatically without user interaction, so you need to set it once manually:
 
-1. 在任一 `.glb` 上按右鍵，選「開啟檔案時使用」，再選「選擇其他應用程式」。
-2. 選「GLB 檢視器」，勾選「一律使用此應用程式開啟 .glb 檔案」。
+1. Right-click any `.glb` file, select **Open with**, then choose **Choose another app**.
+2. Select **GLB Viewer** and check **Always use this app to open .glb files**.
 
-安裝時會順便開啟 Windows 的預設應用程式設定頁，方便你操作。
+The installer automatically opens Windows Default Apps settings to assist you.
 
-## 使用
+## Usage
 
-雙擊 `.glb`。左鍵旋轉，滾輪縮放，右鍵平移。模型含動畫時，標題列會出現「播放動畫」。
+Double-click any `.glb` file.
+- **Left click & drag**: Rotate model
+- **Scroll wheel**: Zoom in / out
+- **Right click & drag**: Pan
+- **Play Animation**: Appears in the title bar when the model contains animations.
+- **Language Switcher (🌐)**: Toggle between English and 繁體中文 in the title bar dropdown.
 
-### 光線效果
+### Lighting Effects
 
-按標題列的「光線」會展開右側面板。
+Click **Lighting** in the title bar to expand the right side panel:
 
-- **光線預設**：柔和攝影棚、正午強光、側逆光輪廓、風格 B，一鍵套用。
-- **顯示方式**：
-  - 上色：保留模型原本的材質，搭配內建的攝影棚環境光。
-  - 純顏色：不打光，只看貼圖原色。
-  - 風格 B：兩階明暗加描邊的卡通風格。
-- **打光**：可以調水平角度、仰角、亮度、環境光，風格 B 另有明暗交界與描邊粗細。「光線跟著鏡頭」開啟時，光源方向以畫面為準。
-- 按住 Shift 並在畫面上拖曳，可以直接轉動光源。
+- **Presets**: Studio, Noon, Rim, and Toon B (one-click apply).
+- **Display Modes**:
+  - **Lit**: Retains original PBR materials with studio environment lighting and a directional light.
+  - **Flat**: Unlit base color view to inspect textures directly.
+  - **Toon B**: Stylized two-tone cel-shading with outlines.
+- **Lighting Controls**: Adjust azimuth, elevation, brightness, and ambient intensity. Toon B adds shadow threshold and outline thickness. When **Attach light to camera** is enabled, light direction is relative to your viewpoint.
+- Hold **Shift** and drag on the canvas to freely rotate the light source.
 
-設定不會被記住，每次開啟都從「柔和攝影棚」開始。
+Settings reset to "Studio" each time a file is opened.
 
-專案附了一個範例檔 `samples/triangle.glb`，可以拿來試試看。
+A sample model `samples/triangle.glb` is included in the project for testing.
 
-## 縮圖與圖示
+## Thumbnails and Icons
 
-`.glb` 在檔案總管裡會像圖片一樣顯示縮圖。縮圖由安裝時編譯的小型元件產生，不需要開啟檢視器，也不會連網。
+`.glb` files display preview thumbnails in File Explorer just like standard image files. Thumbnails are rendered by a lightweight native component compiled during installation, without opening the viewer or accessing the internet.
 
-- 固定從前右上方的斜角度看，背景透明，模型自動置中並縮放到剛好填滿。
-- 會畫出基本色、頂點色、基本色貼圖、節點的位置與縮放，以及骨架動畫的預設姿勢。
-- 不畫法線貼圖、金屬粗糙度、自發光、半透明與鏤空，所以質感會比檢視器簡單，帶鏤空的葉片或貼花會畫成實心。
-- 無法產生縮圖時，檔案總管會改顯示 `.glb` 的檔案圖示，不會跳出錯誤。這包括使用 Draco、Meshopt、KTX2 壓縮的模型、超過 100 MB 的檔案，以及處理超過約 4 秒的模型。
-- 檔案類型圖示在 GLB 檢視器是預設程式時才會顯示。
-- Windows 會快取縮圖。安裝後看不到縮圖時，可以到磁碟清理勾選縮圖後清除，或重新啟動檔案總管。
+- Fixed view from the upper-front-right angle with a transparent background; models are automatically centered and fitted.
+- Renders base color, vertex colors, base color textures, node transforms, and default poses of skinned skeletal meshes.
+- Does not render normal maps, metallic-roughness, emissive, transparency, or alpha cutouts; cutouts (e.g. leaves, decals) appear solid.
+- If a thumbnail cannot be generated (e.g. models compressed with Draco, Meshopt, KTX2, files > 100 MB, or generation exceeding ~4 seconds), File Explorer falls back to the `.glb` file icon without throwing errors.
+- The file type icon is displayed when GLB Viewer is configured as the default handler.
+- Windows caches thumbnails. If thumbnails do not show immediately after installation, clear the thumbnail cache in Disk Cleanup or restart Windows Explorer.
 
-如果 `.glb` 已經有其他程式提供的縮圖，安裝時會保留它，只輸出一行提示。想改用本專案的縮圖，加上 `-ForceThumbnail` 重新安裝。原本的設定會被記下來，移除時自動還原：
+If another program already provides thumbnail handlers for `.glb`, the installer preserves existing settings and prints a notice. To override and use this project's thumbnail provider, re-run with `-ForceThumbnail`. The previous handler is remembered and automatically restored upon uninstallation:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -ForceThumbnail
 ```
 
-## 更新
+## Updates
 
-標題列右上角的「更新」旁邊顯示目前的版本號。按下去會連到 GitHub 檢查最新版本：
+The title bar displays the current version next to the **Update** button. Clicking it checks GitHub for the latest release:
 
-1. 有新版時，會顯示目前與最新的版本號，按「更新」才會開始下載並安裝。
-2. 完成後請關閉視窗，再重新開啟，才會使用新版。
-3. 平常不會自動檢查，也不會自動連網。
+1. When an update is available, current and latest version numbers are displayed. Click **Update** to begin downloading and installing.
+2. Close and reopen the window once completed to start using the new version.
+3. Does not check for updates automatically in the background.
 
-更新會覆蓋安裝資料夾裡的檔案，並補上或更新縮圖元件與檔案類型圖示，不會變更 `.glb` 的預設開啟程式。下載失敗或內容不完整時，會顯示錯誤，安裝資料夾維持原狀。縮圖元件編譯失敗只會警告，檢視器照常使用。
+Updates overwrite files in the installation folder and register or update thumbnail and icon handlers without altering your default file association. If a download fails or is incomplete, an error is reported and the existing installation remains untouched.
 
-縮圖元件的檔名帶有版本號。檔案總管可能正在使用舊版元件，所以更新後新縮圖立即生效，舊檔案則在下次安裝或移除時再清除。
+Thumbnail DLLs include version numbers in their filenames. If File Explorer holds a lock on the older DLL, the new version takes effect immediately, while older DLLs are cleaned up on the next installation or uninstallation.
 
-從原始碼資料夾直接執行時是開發模式，按鈕會提示不支援更新。
+Running directly from the repository source folder is treated as development mode, where updates are disabled.
 
-沒有「更新」按鈕的舊版，請再執行一次上面的安裝指令，之後就能用按鈕更新。
+## Uninstallation
 
-## 移除
+Run the uninstaller one-liner in PowerShell:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/wkai2573/glb-viewer/main/uninstall.ps1).TrimStart([char]0xFEFF)))
 ```
 
-或者執行安裝資料夾裡的 `uninstall.ps1`：
+Or execute `uninstall.ps1` from the installation directory:
 
 ```powershell
 & "$env:LOCALAPPDATA\GlbViewer\uninstall.ps1"
 ```
 
-會刪除安裝資料夾與登錄項目，包含縮圖元件。如果檔案總管正在使用縮圖元件而刪不掉，會留下那一個檔案並告訴你位置，登出或重新啟動檔案總管後再手動刪除即可。
+This removes the installation directory and registry entries (including thumbnail handlers). If Windows File Explorer locks the thumbnail DLL, the uninstaller leaves that file, displays its path, and permits manual deletion after logging out or restarting File Explorer.
 
-## 運作方式
+## How It Works
 
-縮圖元件是 `src/GlbThumbnail.cs`，安裝時由 .NET Framework 內建的 `csc.exe` 編譯成 `GlbThumb_<版本>.dll`，以 `CodeBase` 的方式登錄在目前使用者的 `HKCU` 之下，作為 `.glb` 的縮圖提供者。裡面是自己寫的 GLB 解析與軟體光柵化，不依賴瀏覽器。
+- **Thumbnail Component**: Located in `src/GlbThumbnail.cs`. Compiled during installation via the built-in .NET Framework `csc.exe` into `GlbThumb_<version>.dll` and registered under current user `HKCU` using `CodeBase` as the `.glb` thumbnail provider. Features custom GLB parsing and software rasterization with zero browser dependencies.
+- **Viewer**: Upon double-clicking, `GlbViewer.vbs` quietly spawns `GlbViewer.ps1`, which starts a temporary local HTTP server on a random port at `127.0.0.1`. It serves the viewer page, the model, and Three.js scripts, opening in a clean Microsoft Edge application window (or default browser if Edge is absent). The URL includes a random authorization token and validates request hosts. When the window is closed, the page sends a beacon notification to the server, and the server shuts down within seconds.
 
-雙擊後，`GlbViewer.vbs` 以無視窗方式啟動 `GlbViewer.ps1`。它只在 `127.0.0.1` 的隨機埠上開一個暫時的本機伺服器，提供檢視頁、模型與 three.js 的腳本，然後用 Microsoft Edge 的應用程式視窗開啟。找不到 Edge 時改用預設瀏覽器。網址帶有隨機路徑，並且會檢查請求的主機名稱。視窗關閉時頁面會通知伺服器，伺服器在幾秒內自行結束。
+## Limitations
 
-## 限制
+- Supports binary `.glb` files only (`.gltf` files with external assets are not supported).
+- Models using Draco compression download Google's online Draco decoder and require internet connectivity.
+- Models with KTX2 texture compression or Meshopt compression are not supported and will show an informative error message.
+- Windows only. Requires Windows PowerShell 5.1 and .NET Framework 4 `csc.exe` (both pre-installed on Windows 10/11).
 
-- 只支援 `.glb`。`.gltf` 常依賴外部檔案，沒有處理。
-- 使用 Draco 壓縮的模型，會從 Google 的網站載入解碼器，這類模型需要網路。
-- 使用 KTX2 貼圖壓縮或 Meshopt 壓縮的模型不支援，會顯示錯誤訊息。
-- 縮圖只支援前述的內容範圍，其餘情況顯示檔案圖示。
-- 僅支援 Windows，需要 Windows PowerShell 5.1，系統內建即有。縮圖元件需要 .NET Framework 4 的 `csc.exe`，同樣是系統內建。
+## Development and Testing
 
-## 開發與測試
+Run test suite:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\test.ps1
 ```
 
-測試會以真實的 Windows PowerShell 啟動伺服器，只透過 HTTP 驗證行為，並在暫存資料夾與測試專用的登錄位置跑完整的安裝、重裝、移除，不會動到真正的設定。
+Tests launch real Windows PowerShell instances to run the local server, verify behaviors over HTTP, and perform complete install, re-install, and uninstall runs in temporary directories and isolated test registry paths without affecting system settings.
 
-縮圖的測試放在 `test-thumbnail.ps1`，`test.ps1` 會一併執行，也可以單獨跑。它直接呼叫渲染器輸出 PNG 來檢查，不經過檔案總管。測試用的模型由測試腳本即時組出，不需要提交二進位樣本。
+Thumbnail tests are located in `test-thumbnail.ps1` and run as part of `test.ps1` (or standalone). They directly invoke the rasterizer to verify rendered PNG metrics without invoking File Explorer.
 
-### 重新產生圖示
+### Regenerate Icon
 
-圖示的原始檔是 `assets/icon.svg`。修改後執行下面的指令，會用 Edge 的無頭模式轉成 `src/GlbViewer.ico`，再一併提交：
+The vector icon source is at `assets/icon.svg`. After editing, run the following command to convert it via headless Edge into `src/GlbViewer.ico`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\make-icon.ps1
 ```
 
-### 發佈新版本
+### Releasing New Versions
 
-版本號寫在專案根目錄的 `VERSION`，格式是三段數字。更新按鈕讀的是 GitHub 上 main 分支的這個檔案，數字比使用者安裝的大就視為有新版。所以發佈新版只要改 `VERSION`，再 push 到 main。
+Versions are defined in the root `VERSION` file as three digits (`X.Y.Z`). The update button checks this file on GitHub's `main` branch. To release a new version, bump `VERSION` and push to `main`.
 
-更新時，程式會下載 main 的壓縮檔，並用裡面新版的 `install.ps1 -InstallDir <安裝資料夾> -UpdateOnly` 覆蓋檔案。因此這兩個參數要維持相容，否則舊版安裝的使用者會更新失敗。`-UpdateOnly` 不會變更預設程式的關聯，但會補上縮圖與檔案類型圖示，所以新增這類安裝內容時，也要確認它在 `-UpdateOnly` 下行為正確。
+During updates, the application downloads the repository archive from `main` and invokes `install.ps1 -InstallDir <dir> -UpdateOnly`. These parameters must remain backwards compatible.
 
-## 授權
+## License
 
-本專案以 [MIT 授權](LICENSE) 釋出。
+Released under the [MIT License](LICENSE).
 
-附帶的 [three.js](https://github.com/mrdoob/three.js) r128 以 MIT 授權釋出，授權文字見 [src/three.LICENSE.txt](src/three.LICENSE.txt)。
+Includes [three.js](https://github.com/mrdoob/three.js) r128 under the MIT License; see [src/three.LICENSE.txt](src/three.LICENSE.txt).

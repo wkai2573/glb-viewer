@@ -1,4 +1,4 @@
-﻿# 安裝 glb-viewer：複製檔案到使用者資料夾，並把它登錄為 .glb 的可選開啟程式。
+# 安裝 glb-viewer：複製檔案到使用者資料夾，並把它登錄為 .glb 的可選開啟程式。
 # 只寫入目前使用者的範圍，不需要系統管理員權限。可重複執行。
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'GlbViewer'),
@@ -10,10 +10,15 @@ param(
     # 所以這個參數與 -InstallDir 必須維持相容。縮圖與圖示屬於安裝內容，更新時也會一併補上。
     [switch]$UpdateOnly,
     # .glb 已有其他縮圖元件時，預設不去蓋掉它。加上這個參數才改用本程式的。
-    [switch]$ForceThumbnail
+    [switch]$ForceThumbnail,
+    [ValidateSet('Auto', 'en', 'zh')][string]$Language = 'Auto'
 )
 
 $ErrorActionPreference = 'Stop'
+
+$isZh = if ($Language -eq 'zh') { $true }
+        elseif ($Language -eq 'en') { $false }
+        else { ((Get-UICulture).Name -like 'zh*') }
 
 $progId = 'GlbViewer.File'
 $required = 'GlbViewer.ps1', 'GlbViewer.vbs', 'viewer.html', 'three.min.js', 'OrbitControls.js', 'GLTFLoader.js', 'DRACOLoader.js', 'three.LICENSE.txt', 'GlbViewer.ico'
@@ -33,7 +38,10 @@ function Build-ThumbnailDll([string]$Source, [string]$InstallDir, [string]$Assem
     # 不能用目前執行階段的目錄找：在 PowerShell 7 下它指向 PowerShell 7 自己，沒有 csc.exe
     $csc = @("$env:windir\Microsoft.NET\Framework64\v4.0.30319\csc.exe", "$env:windir\Microsoft.NET\Framework\v4.0.30319\csc.exe") |
         Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-    if (-not $csc) { throw '找不到 .NET Framework 4 的編譯器 csc.exe。' }
+    if (-not $csc) {
+        $msg = if ($isZh) { '找不到 .NET Framework 4 的編譯器 csc.exe。' } else { 'Cannot find .NET Framework 4 compiler csc.exe.' }
+        throw $msg
+    }
     # 組件名稱取自輸出的檔名，所以要先在暫存資料夾用正確的檔名編譯，再複製過去
     $work = Join-Path ([IO.Path]::GetTempPath()) ('glb-thumb-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $work | Out-Null
@@ -44,7 +52,11 @@ function Build-ThumbnailDll([string]$Source, [string]$InstallDir, [string]$Assem
         $log = & $csc /nologo /target:library /optimize+ "/out:$built" /reference:System.Drawing.dll $Source 2>&1
         $exit = $LASTEXITCODE
         $ErrorActionPreference = $previous
-        if ($exit -ne 0 -or -not (Test-Path -LiteralPath $built)) { throw "編譯失敗：$(($log | Out-String).Trim())" }
+        if ($exit -ne 0 -or -not (Test-Path -LiteralPath $built)) {
+            $raw = ($log | Out-String).Trim()
+            $msg = if ($isZh) { "編譯失敗：$raw" } else { "Compilation failed: $raw" }
+            throw $msg
+        }
         $target = Join-Path $InstallDir "$AssemblyName.dll"
         try {
             Copy-Item -LiteralPath $built -Destination $target -Force
@@ -76,7 +88,7 @@ function Get-ForeignThumbnailHandler([string]$ClassesRoot, [string]$Clsid, [stri
 function Register-ThumbnailProvider([string]$ClassesRoot, [string]$DllPath, [string]$AssemblyName, [string]$Clsid, [string]$HandlerId, [string]$Class) {
     $clsKey = "$ClassesRoot\CLSID\$Clsid"
     New-Item -Path "$clsKey\InprocServer32" -Force | Out-Null
-    Set-ItemProperty -LiteralPath $clsKey -Name '(default)' -Value 'GLB 檢視器縮圖'
+    Set-ItemProperty -LiteralPath $clsKey -Name '(default)' -Value 'GLB Viewer Thumbnail'
     $assembly = "$AssemblyName, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
     $codeBase = ([Uri]$DllPath).AbsoluteUri
     # 和 regasm /codebase 寫出的登錄結構相同，但直接寫在使用者範圍，不需要系統管理員權限
@@ -116,7 +128,8 @@ try {
         $temp = Join-Path ([IO.Path]::GetTempPath()) ('glb-viewer-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $temp | Out-Null
         $zip = Join-Path $temp 'source.zip'
-        Write-Host "從 GitHub 下載 $Repo 的 $Ref ..."
+        $downloadMsg = if ($isZh) { "從 GitHub 下載 $Repo 的 $Ref ..." } else { "Downloading $Repo ($Ref) from GitHub..." }
+        Write-Host $downloadMsg
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/$Ref.zip" -OutFile $zip -UseBasicParsing
         Expand-Archive -LiteralPath $zip -DestinationPath $temp
@@ -130,7 +143,11 @@ try {
     # 全部確認齊全才開始複製，缺檔時不會留下半套
     $missing = @($required + $compileOnly | Where-Object { -not (Test-Path -LiteralPath (Join-Path $srcDir $_)) }) +
         @($rootFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $rootDir $_)) })
-    if ($missing) { throw "來源缺少檔案：$($missing -join ', ')" }
+    if ($missing) {
+        $mStr = $missing -join ', '
+        $msg = if ($isZh) { "來源缺少檔案：$mStr" } else { "Source missing required files: $mStr" }
+        throw $msg
+    }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
@@ -179,7 +196,12 @@ try {
         $assemblyName = Get-ThumbnailAssemblyName $version
         $foreign = Get-ForeignThumbnailHandler $ClassesRoot $thumbClsid $thumbHandlerId $isRealRegistry
         if ($foreign -and -not $ForceThumbnail) {
-            Write-Host ".glb 已有其他縮圖元件 $foreign，略過縮圖註冊。要改用本程式的，請加上 -ForceThumbnail 重新安裝。"
+            $warn = if ($isZh) {
+                ".glb 已有其他縮圖元件 $foreign，略過縮圖註冊。要改用本程式的，請加上 -ForceThumbnail 重新安裝。"
+            } else {
+                ".glb already has another thumbnail handler $foreign; skipping registration. Re-run with -ForceThumbnail to override."
+            }
+            Write-Host $warn
         } else {
             $dll = Build-ThumbnailDll (Join-Path $srcDir $compileOnly) $InstallDir $assemblyName
             Register-ThumbnailProvider $ClassesRoot $dll $assemblyName $thumbClsid $thumbHandlerId $thumbClass
@@ -190,7 +212,12 @@ try {
                 ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
         }
     } catch {
-        Write-Warning "縮圖元件安裝失敗，已略過：$($_.Exception.Message)"
+        $warn = if ($isZh) {
+            "縮圖元件安裝失敗，已略過：$($_.Exception.Message)"
+        } else {
+            "Thumbnail component installation failed, skipped: $($_.Exception.Message)"
+        }
+        Write-Warning $warn
     }
 } finally {
     if ($temp) { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
@@ -210,12 +237,12 @@ function Send-ShellAssocChanged {
 
 if ($UpdateOnly) {
     if ($thumbnailChanged -or (Test-Path -LiteralPath $progKey)) { Send-ShellAssocChanged }
-    Write-Host "已更新 $InstallDir"
+    Write-Host $(if ($isZh) { "已更新 $InstallDir" } else { "Updated $InstallDir" })
     exit 0
 }
 
 New-Item -Path "$progKey\shell\open\command" -Force | Out-Null
-Set-ItemProperty -Path $progKey -Name '(default)' -Value 'GLB 檢視器'
+Set-ItemProperty -Path $progKey -Name '(default)' -Value 'GLB Viewer'
 Set-ItemProperty -Path "$progKey\shell\open\command" -Name '(default)' `
     -Value ('wscript.exe "{0}" "%1"' -f (Join-Path $InstallDir 'GlbViewer.vbs'))
 
@@ -225,18 +252,24 @@ New-ItemProperty -Path $withKey -Name $progId -Value '' -PropertyType String -Fo
 
 Send-ShellAssocChanged
 
-Write-Host "已安裝到 $InstallDir"
+Write-Host $(if ($isZh) { "已安裝到 $InstallDir" } else { "Installed to $InstallDir" })
 
 if ($isRealRegistry) {
     $userChoice = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.glb\UserChoice'
     $current = if (Test-Path $userChoice) { (Get-ItemProperty $userChoice).ProgId } else { $null }
 
     if ($current -eq $progId) {
-        Write-Host '.glb 的預設開啟程式已經是 GLB 檢視器。'
+        Write-Host $(if ($isZh) { '.glb 的預設開啟程式已經是 GLB Viewer。' } else { 'The default application for .glb is already GLB Viewer.' })
     } else {
-        Write-Host 'Windows 不允許程式自行變更預設，請手動選一次：'
-        Write-Host '  在任一 .glb 上按右鍵，選「開啟檔案時使用」，再選「選擇其他應用程式」，'
-        Write-Host '  選「GLB 檢視器」並勾選「一律使用」。'
+        if ($isZh) {
+            Write-Host 'Windows 不允許程式自行變更預設，請手動選一次：'
+            Write-Host '  在任一 .glb 上按右鍵，選「開啟檔案時使用」，再選「選擇其他應用程式」，'
+            Write-Host '  選「GLB Viewer」並勾選「一律使用此應用程式開啟 .glb 檔案」。'
+        } else {
+            Write-Host 'Windows does not allow programs to change defaults automatically. Please set it once manually:'
+            Write-Host '  Right-click any .glb, select "Open with" -> "Choose another app",'
+            Write-Host '  select "GLB Viewer" and check "Always use this app to open .glb files".'
+        }
         if (-not $NoOpenSettings) { Start-Process 'ms-settings:defaultapps' }
     }
 }

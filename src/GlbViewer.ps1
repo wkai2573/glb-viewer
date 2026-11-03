@@ -1,15 +1,20 @@
-﻿param(
+param(
     [Parameter(Mandatory = $true)][string]$Path,
     [switch]$NoLaunch,
     # 更新來源。平常用預設值指向 GitHub，測試時改指向本機檔案。
     [string]$VersionUrl = 'https://raw.githubusercontent.com/wkai2573/glb-viewer/main/VERSION',
     [string]$ZipUrl = 'https://github.com/wkai2573/glb-viewer/archive/refs/heads/main.zip',
     # 更新時交給安裝腳本寫入的登錄位置。平常用預設值，測試時改指向測試專用的位置。
-    [string]$ClassesRoot = 'HKCU:\Software\Classes'
+    [string]$ClassesRoot = 'HKCU:\Software\Classes',
+    [ValidateSet('Auto', 'en', 'zh')][string]$Language = 'Auto'
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+$isZh = if ($Language -eq 'zh') { $true }
+        elseif ($Language -eq 'en') { $false }
+        else { ((Get-UICulture).Name -like 'zh*') }
 
 if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { exit 1 }
 $file = (Resolve-Path -LiteralPath $Path).Path
@@ -22,7 +27,10 @@ $versionFile = if ($canUpdate) { Join-Path $PSScriptRoot 'VERSION' } else { Join
 
 function ConvertTo-Version([string]$Text) {
     $t = $Text.Trim().TrimStart([char]0xFEFF)
-    if ($t -notmatch '^\d+\.\d+\.\d+$') { throw "版本號格式不對：$t" }
+    if ($t -notmatch '^\d+\.\d+\.\d+$') {
+        $msg = if ($isZh) { "版本號格式不對：$t" } else { "Invalid version format: $t" }
+        throw $msg
+    }
     [version]$t
 }
 
@@ -34,7 +42,11 @@ function Get-LocalVersion {
     $null
 }
 
-$localVersionError = '無法讀取本機的版本檔，請重新執行安裝指令。'
+$localVersionError = if ($isZh) {
+    '無法讀取本機的版本檔，請重新執行安裝指令。'
+} else {
+    'Cannot read local VERSION file. Please reinstall glb-viewer.'
+}
 
 function Save-Remote([string]$Url, [string]$OutFile, [int]$TimeoutSec) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -50,7 +62,8 @@ function Invoke-UpdateCheck {
         Save-Remote $VersionUrl $tmp 10
         $latest = ConvertTo-Version ([IO.File]::ReadAllText($tmp))
     } catch {
-        return @{ Status = 502; Body = @{ ok = $false; error = "無法取得最新版本：$($_.Exception.Message)" } }
+        $msg = if ($isZh) { "無法取得最新版本：$($_.Exception.Message)" } else { "Cannot fetch latest version: $($_.Exception.Message)" }
+        return @{ Status = 502; Body = @{ ok = $false; error = $msg } }
     } finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
     }
@@ -68,28 +81,47 @@ function Invoke-UpdateApply {
         Save-Remote $ZipUrl $zip 60
         Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $work 'x')
         $top = Get-ChildItem -LiteralPath (Join-Path $work 'x') -Directory | Select-Object -First 1
-        if (-not $top) { throw '下載的壓縮檔是空的。' }
+        if (-not $top) {
+            $msg = if ($isZh) { '下載的壓縮檔是空的。' } else { 'Downloaded archive is empty.' }
+            throw $msg
+        }
 
         $versionPath = Join-Path $top.FullName 'VERSION'
-        if (-not (Test-Path -LiteralPath $versionPath)) { throw '下載的內容沒有版本檔。' }
+        if (-not (Test-Path -LiteralPath $versionPath)) {
+            $msg = if ($isZh) { '下載的內容沒有版本檔。' } else { 'Downloaded content lacks a VERSION file.' }
+            throw $msg
+        }
         $downloaded = ConvertTo-Version ([IO.File]::ReadAllText($versionPath))
         if ($downloaded -le $current) {
-            return @{ Status = 409; Body = @{ ok = $false; error = "目前的 $current 已是最新版本，下載到的是 $downloaded。" } }
+            $msg = if ($isZh) {
+                "目前的 $current 已是最新版本，下載到的是 $downloaded。"
+            } else {
+                "Current version $current is already up to date (downloaded $downloaded)."
+            }
+            return @{ Status = 409; Body = @{ ok = $false; error = $msg } }
         }
 
         # 用新版自己的安裝腳本覆蓋檔案，這樣新版新增或移除的檔案也會一併處理
         $installer = Join-Path $top.FullName 'install.ps1'
-        if (-not (Test-Path -LiteralPath $installer)) { throw '下載的內容沒有安裝腳本。' }
+        if (-not (Test-Path -LiteralPath $installer)) {
+            $msg = if ($isZh) { '下載的內容沒有安裝腳本。' } else { 'Downloaded content lacks install.ps1.' }
+            throw $msg
+        }
         # 子程序寫到標準錯誤時，Windows PowerShell 5.1 在 Stop 模式下會直接丟例外，改成只看結束碼
         $ErrorActionPreference = 'Continue'
-        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -InstallDir $PSScriptRoot -ClassesRoot $ClassesRoot -UpdateOnly 2>&1
+        $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -InstallDir $PSScriptRoot -ClassesRoot $ClassesRoot -Language $Language -UpdateOnly 2>&1
         $exit = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
-        if ($exit -ne 0) { throw "安裝失敗：$(($out | Out-String).Trim())" }
+        if ($exit -ne 0) {
+            $raw = ($out | Out-String).Trim()
+            $msg = if ($isZh) { "安裝失敗：$raw" } else { "Installation failed: $raw" }
+            throw $msg
+        }
 
         @{ Status = 200; Body = @{ ok = $true; version = $downloaded.ToString() } }
     } catch {
-        @{ Status = 500; Body = @{ ok = $false; error = "更新失敗：$($_.Exception.Message)" } }
+        $msg = if ($isZh) { "更新失敗：$($_.Exception.Message)" } else { "Update failed: $($_.Exception.Message)" }
+        @{ Status = 500; Body = @{ ok = $false; error = $msg } }
     } finally {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -182,9 +214,11 @@ try {
                         }
                         { $_ -in 'update/check', 'update/apply' } {
                             if (-not $canUpdate) {
-                                Send-Json $res 403 @{ ok = $false; error = '開發模式不支援更新。' }
+                                $errMsg = if ($isZh) { '開發模式不支援更新。' } else { 'Development mode does not support updates.' }
+                                Send-Json $res 403 @{ ok = $false; error = $errMsg }
                             } elseif ($route -eq 'update/apply' -and $req.HttpMethod -ne 'POST') {
-                                Send-Json $res 405 @{ ok = $false; error = '更新只接受 POST。' }
+                                $errMsg = if ($isZh) { '更新只接受 POST。' } else { 'Update only accepts POST.' }
+                                Send-Json $res 405 @{ ok = $false; error = $errMsg }
                             } else {
                                 $r = if ($route -eq 'update/check') { Invoke-UpdateCheck } else { Invoke-UpdateApply }
                                 Send-Json $res $r.Status $r.Body

@@ -1,10 +1,15 @@
-﻿# 移除 glb-viewer：刪除登錄項目與安裝資料夾。
+# 移除 glb-viewer：刪除登錄項目與安裝資料夾。
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'GlbViewer'),
-    [string]$ClassesRoot = 'HKCU:\Software\Classes'
+    [string]$ClassesRoot = 'HKCU:\Software\Classes',
+    [ValidateSet('Auto', 'en', 'zh')][string]$Language = 'Auto'
 )
 
 $ErrorActionPreference = 'Stop'
+
+$isZh = if ($Language -eq 'zh') { $true }
+        elseif ($Language -eq 'en') { $false }
+        else { ((Get-UICulture).Name -like 'zh*') }
 
 $progId = 'GlbViewer.File'
 $thumbClsid = '{6F1C2D8B-3A47-4E5B-9C0D-2B7A5E4F1D93}'
@@ -26,19 +31,36 @@ if (Test-Path -LiteralPath $InstallDir) {
             $left = @(Get-ChildItem -LiteralPath $InstallDir -Recurse -Force -File -ErrorAction SilentlyContinue)
             $blocking = @($left | Where-Object { $_.Name -notlike 'GlbThumb_*.dll' })
             if ($blocking.Count -gt 0) {
-                Write-Error "無法刪除 $InstallDir。請關閉所有檢視器視窗，並確認目前的目錄不在該資料夾內，再重新執行。$reason"
+                $err = if ($isZh) {
+                    "無法刪除 $InstallDir。請關閉所有檢視器視窗，並確認目前的目錄不在該資料夾內，再重新執行。$reason"
+                } else {
+                    "Cannot delete $InstallDir. Please close all viewer windows, ensure current directory is outside the folder, and retry. $reason"
+                }
+                Write-Error $err
                 exit 1
             }
             Get-ChildItem -LiteralPath $InstallDir -Recurse -Force -Directory -ErrorAction SilentlyContinue |
                 Sort-Object { $_.FullName.Length } -Descending |
                 ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
             foreach ($f in $left) {
-                Write-Warning "縮圖元件正被檔案總管使用，無法刪除：$($f.FullName)。登出或重新啟動檔案總管後，可以手動刪除這個檔案。"
+                $warn = if ($isZh) {
+                    "縮圖元件正被檔案總管使用，無法刪除：$($f.FullName)。登出或重新啟動檔案總管後，可以手動刪除這個檔案。"
+                } else {
+                    "Thumbnail component is locked by File Explorer and cannot be deleted: $($f.FullName). It can be deleted manually after logging out or restarting File Explorer."
+                }
+                Write-Warning $warn
             }
         }
-        if (-not (Test-Path -LiteralPath $InstallDir)) { Write-Host "已移除 $InstallDir" }
+        if (-not (Test-Path -LiteralPath $InstallDir)) {
+            Write-Host $(if ($isZh) { "已移除 $InstallDir" } else { "Removed $InstallDir" })
+        }
     } else {
-        Write-Warning "$InstallDir 看起來不是 glb-viewer 的安裝資料夾，已略過。"
+        $warn = if ($isZh) {
+            "$InstallDir 看起來不是 glb-viewer 的安裝資料夾，已略過。"
+        } else {
+            "$InstallDir does not appear to be a glb-viewer installation folder, skipped."
+        }
+        Write-Warning $warn
     }
 }
 
@@ -73,7 +95,12 @@ if ($ClassesRoot -eq 'HKCU:\Software\Classes') {
 
     $userChoice = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.glb\UserChoice'
     if ((Test-Path $userChoice) -and (Get-ItemProperty $userChoice).ProgId -eq $progId) {
-        Write-Host '提醒：Windows 仍記得 .glb 預設用 GLB 檢視器，下次雙擊時會請你重新選擇程式。'
+        $notice = if ($isZh) {
+            '提醒：Windows 仍記得 .glb 預設用 GLB Viewer，下次雙擊時會請你重新選擇程式。'
+        } else {
+            'Notice: Windows still remembers GLB Viewer as default for .glb. You will be prompted to select an app upon next launch.'
+        }
+        Write-Host $notice
     }
 }
-Write-Host '已移除。'
+Write-Host $(if ($isZh) { '已移除。' } else { 'Removed.' })

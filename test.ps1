@@ -1,4 +1,4 @@
-﻿# 冒煙測試：以真實的 Windows PowerShell 啟動檢視器伺服器，只透過它的 HTTP 介面驗證行為。
+# 冒煙測試：以真實的 Windows PowerShell 啟動檢視器伺服器，只透過它的 HTTP 介面驗證行為。
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
@@ -151,7 +151,11 @@ try {
         Assert-That '隱藏屬性不會被樣式蓋掉' ($page.Content -match '\[hidden\]\s*\{[^}]*display:\s*none')
 
         Write-Host '旋轉預設值'
-        Assert-That '預設不自動旋轉' ($page.Content -match '<button id="rotate" aria-pressed="false">自動旋轉</button>' -and $page.Content -match 'controls\.autoRotate = false;')
+        Assert-That '預設不自動旋轉' ($page.Content -match '<button id="rotate" aria-pressed="false" data-i18n="rotate">Auto Rotate</button>' -and $page.Content -match 'controls\.autoRotate = false;')
+
+        Write-Host '多語系與語言切換'
+        Assert-That '首頁包含語言切換下拉選單' ($page.Content -match 'id="langBtn"' -and $page.Content -match 'id="langMenu"')
+        Assert-That '首頁包含多語系字典（英文與繁體中文）' ($page.Content -match 'window\.__I18N' -and $page.Content -match "'zh-TW'\s*:")
 
         Write-Host '結束行為'
         Invoke-WebRequest -Uri ($s.Url + 'bye') -UseBasicParsing | Out-Null
@@ -181,6 +185,14 @@ try {
     $cmdKey = "$testRoot\GlbViewer.File\shell\open\command"
     $cmd = if (Test-Path $cmdKey) { (Get-ItemProperty $cmdKey).'(default)' } else { '' }
     Assert-That '開啟指令指向安裝資料夾的啟動檔' ($cmd -like "*$installDir\GlbViewer.vbs*" -and $cmd -like '*"%1"')
+
+    $progDesc = if (Test-Path "$testRoot\GlbViewer.File") { (Get-ItemProperty "$testRoot\GlbViewer.File").'(default)' } else { '' }
+    Assert-That '應用程式名稱註冊為 GLB Viewer' ($progDesc -eq 'GLB Viewer')
+
+    $clsidDesc = if (Test-Path "$testRoot\CLSID\{6F1C2D8B-3A47-4E5B-9C0D-2B7A5E4F1D93}") {
+        (Get-ItemProperty "$testRoot\CLSID\{6F1C2D8B-3A47-4E5B-9C0D-2B7A5E4F1D93}").'(default)'
+    } else { '' }
+    Assert-That '縮圖元件名稱註冊為 GLB Viewer Thumbnail' ($clsidDesc -eq 'GLB Viewer Thumbnail')
 
     $withKey = "$testRoot\.glb\OpenWithProgids"
     $registered = (Test-Path $withKey) -and ((Get-Item $withKey).Property -contains 'GlbViewer.File')
